@@ -1,0 +1,179 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Jan 26 00:23:03 2023
+
+@author: WauWter
+"""
+
+import numpy as np
+from python_scripts.wauwternifti import readnii, savenii
+from python_scripts.wauwtermisc import butterworth_filter_3D
+import os
+from scipy import ndimage
+
+def mp2rage_norm(mp2r_dir,mp2r_file):
+    nii,hdr=readnii(mp2r_dir+mp2r_file)
+    nii-=hdr['scl_inter']
+    
+    hg,bins=np.histogram(nii,bins=10000)
+    maxbin=np.where(hg==np.max(hg))[0]
+    
+    mask=np.zeros(nii.shape,dtype=np.int16)
+    for i in range(1,nii.shape[0]-1):
+        for j in range(1,nii.shape[1]-1):
+            for k in range(1,nii.shape[2]-1):
+                if (nii[i,j,k]>bins[maxbin-1]) & (nii[i,j,k]<bins[maxbin+1]):
+                    if np.sum((nii[i-1:i+2,j-1:j+2,k-1:k+2]>bins[maxbin-1]) & (nii[i-1:i+2,j-1:j+2,k-1:k+2]<bins[maxbin+1])) >= 14:
+                        mask[i,j,k]=1
+    mask[0,:,:]=1
+    mask[:,0,:]=1
+    mask[:,:,0]=1
+    mask[-1,:,:]=1
+    mask[:,-1,:]=1
+    mask[:,:,-1]=1
+
+    t1b=nii.astype(np.float32)
+    t1b[mask==0]+=bins[maxbin]
+    t1b-=bins[maxbin]
+
+    hdr['scl_slope']=1
+    hdr['scl_inter']=0
+    hdr['bitpix']=32
+    hdr['datatype']=16
+    
+    savenii(t1b,hdr,mp2r_dir+'i'+mp2r_file)
+
+    m2=np.zeros(nii.shape,dtype=np.int16)
+    m2[t1b>10]=1
+    hdr['bitpix']=16
+    hdr['datatype']=4
+    
+    savenii(m2,hdr,mp2r_dir+'mask-i'+mp2r_file)
+
+def survey_norm(survey_dir,survey_file,cutoff=3,order=1.75,minmask=150):
+    nii,hdr=readnii(survey_dir+survey_file)
+    
+    filt=butterworth_filter_3D(nii.shape[0],nii.shape[1],nii.shape[2],cutoff,order)
+    nii_filt = np.abs(np.fft.ifftn(np.fft.fftn(nii) * filt))
+    
+    mask=np.zeros(nii.shape,dtype=np.int16)
+    mask[nii>minmask]=1
+    
+    nii_adjusted=np.zeros(nii.shape)
+    nii_adjusted[mask==1]=nii[mask==1] / nii_filt[mask==1]
+    nii_adjusted = (nii_adjusted**2)
+    nii_adjusted[nii_adjusted >= 3.5]/=8
+    nii_adjusted*=400
+    nii_adjusted=nii_adjusted.astype(np.float32)
+    hdr['datatype']=16
+    hdr['bitpix']=32
+    hdr['scl_slope']=1
+    savenii(nii_adjusted,hdr,survey_dir+'i'+survey_file)
+
+def fillgaps(nii_dir, nii_file, gap=0, fillthres=14, boxsize=3, minv=1, maxv=None):
+    nii,hdr=readnii(nii_dir+nii_file,scaling=False)
+    
+    boxmin=int((boxsize-1)//2)
+    boxmax=int(np.ceil((boxsize-1)/2))
+    if maxv==None:
+        maxv=np.max(nii)
+    
+    boxtotal=boxsize**3
+    maxgaps=boxtotal-fillthres
+    
+    for i in range(boxmin,nii.shape[0]-boxmax):
+        for j in range(boxmin,nii.shape[1]-boxmax):
+            for k in range(boxmin,nii.shape[2]-boxmax):
+                if (nii[i,j,k]==gap) & (np.sum(nii[i-boxmin:i+boxmax+1,j-boxmin:j+boxmax+1,k-boxmin:k+boxmax+1]==gap) <= maxgaps):
+                    hg,loc=np.histogram(nii[i-boxmin:i+boxmax+1,j-boxmin:j+boxmax+1,k-boxmin:k+boxmax+1],bins=np.max(nii[i-boxmin:i+boxmax+1,j-boxmin:j+boxmax+1,k-boxmin:k+boxmax+1]))
+                    maxloc=loc[np.where(hg == np.max(hg))]
+                    maxloc=maxloc[0]
+                    if (maxloc >= minv) & (maxloc <= maxv) & (np.max(hg) >= fillthres):
+                        nii[i,j,k]=maxloc
+                        
+    nii=nii.astype(np.int32)
+    hdr['datatype']=8
+    hdr['bitpix']=32
+    hdr['scl_slope']=1
+    hdr['scl_inter']=0
+    savenii(nii,hdr,nii_dir+'fill_'+nii_file)
+
+
+def atropos_seg(an4_dir,gmin=4,gmax=6):
+    
+    an4files=[]
+    for f in os.listdir(an4_dir):
+        if f.endswith("nii.gz"):
+            an4files.append(f)
+    nr_files=len(an4files)-2
+    
+    t1,hdr=readnii(an4_dir+'AN4Segmentation0N4.nii.gz')
+    an4pos=np.zeros([t1.shape[0],t1.shape[1],t1.shape[2],nr_files],dtype=np.float32)
+    for i in range(nr_files):
+        an4pos[:,:,:,i],hdr=readnii(an4_dir+'AN4SegmentationPosteriors'+str(i+1)+'.nii.gz',scaling=False)
+    
+    an4pos[an4pos >= 0.1]=1
+    an4pos[an4pos < 0.1]=0
+    
+    csf=np.sum(an4pos[:,:,:,0:gmin-1],axis=3)
+    gm=np.sum(an4pos[:,:,:,gmin-1:gmax],axis=3)
+    wm=np.sum(an4pos[:,:,:,gmax:],axis=3)
+    csf[csf >= 1]=1
+    gm[gm >= 1]=1
+    wm[wm >= 1]=1
+    
+    fwhm=2*np.sqrt(2*np.log(2))*hdr['pixdim'][1]
+    smm=0.75
+    sigma=smm/fwhm
+    
+    csf = ndimage.gaussian_filter(csf, sigma, mode='mirror')
+    gm = ndimage.gaussian_filter(gm, sigma, mode='mirror')
+    wm = ndimage.gaussian_filter(wm, sigma, mode='mirror')
+    
+    csf[csf>=0.7]=1
+    wm[wm>=0.7]=1
+    gm[gm>=0.3]=1
+    
+    csfgm=np.zeros(t1.shape)
+    gmwm=np.zeros(t1.shape)
+    
+    for i in range(t1.shape[0]):
+        for j in range(t1.shape[1]):
+            for k in range(t1.shape[2]):
+                minx=i-1
+                maxx=i+2
+                miny=j-1
+                maxy=j+2
+                minz=k-1
+                maxz=k+2
+                if minx < 0: minx=0
+                if miny < 0: miny=0
+                if minz < 0: minz=0
+                if maxx > t1.shape[0]: maxx=t1.shape[0]
+                if maxy > t1.shape[1]: maxy=t1.shape[1]
+                if maxz > t1.shape[2]: maxz=t1.shape[2]
+                if (csf[i,j,k]==1) & (np.max(gm[minx:maxx,miny:maxy,minz:maxz])==1):
+                    csfgm[i,j,k]=1
+                if (wm[i,j,k]==1) & (np.max(gm[minx:maxx,miny:maxy,minz:maxz])==1):
+                    gmwm[i,j,k]=1
+        
+    segt1=np.zeros(t1.shape,dtype=np.int32)
+    segt1[csfgm==1]=1
+    segt1[gmwm==1]=2
+    segt1[gm==1]=3
+    
+    hdr['datatype']=8
+    hdr['bitpix']=32
+    hdr['scl_slope']=1
+    hdr['scl_inter']=0
+    savenii(segt1,hdr,an4_dir+'segt1.nii')
+
+
+
+
+
+
+
+
+  
