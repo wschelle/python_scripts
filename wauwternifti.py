@@ -248,5 +248,32 @@ def savenii(data,header,filename):
             if data.dtype=='float64':
                 f.write(struct.pack('d'*data.size,*np.reshape(data,data.size)))
     
-        
+def getniicoor(nifti_file):
+    hdr=readnii(nifti_file,header_only=True)
+    fx=hdr['dim'][1]
+    fy=hdr['dim'][2]
+    fz=hdr['dim'][3]
+    sx=hdr['pixdim'][1]
+    sy=hdr['pixdim'][2]
+    sz=hdr['pixdim'][3]
+    qb=hdr['quatern_b']
+    qc=hdr['quatern_c']
+    qd=hdr['quatern_d']
+    qa=np.sqrt(1 - (qb**2 + qc**2 + qd**2))
+    qox=hdr['qoffset_x']
+    qoy=hdr['qoffset_y']
+    qoz=hdr['qoffset_z']
+    qoff=np.array([qox,qoy,qoz])
+    R=np.array([[qa*qa+qb*qb-qc*qc-qd*qd, 2*qb*qc-2*qa*qd, 2*qb*qd+2*qa*qc],
+                [2*qb*qc+2*qa*qd, qa*qa+qc*qc-qb*qb-qd*qd, 2*qc*qd-2*qa*qb],
+                [2*qb*qd-2*qa*qc, 2*qc*qd+2*qa*qb, qa*qa+qd*qd-qc*qc-qb*qb]])
+
+    coor=np.zeros([fx,fy,fz,3])
+    for i in range(fx):
+        for j in range(fy):
+            for k in range(fz):
+                im = np.array([(i+1)*sx, (j+1)*sy, (k+1)*sz])
+                coor[i,j,k,:] = R * im + qoff
+    
+    return(coor)
     
