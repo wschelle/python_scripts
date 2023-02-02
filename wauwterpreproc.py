@@ -190,8 +190,8 @@ def fsl_topup_params(json_file,phasedim="y"):
     np.savetxt(jdir+'_acq_param.txt', acq_params, fmt='%8.6f')
 
 def layersmooth(niifile,layfile,fwhm=1,kernelsize=7,nlay=6,parcfile='',lowcut=10,suffix='ls'):
-    nii,hdr=loadnii(niifile)
-    lay,hdrlay=loadnii(layfile,scaling=False)
+    nii,hdr=readnii(niifile)
+    lay,hdrlay=readnii(layfile,scaling=False)
     
     nvox=hdr['dim'][1]*hdr['dim'][2]*hdr['dim'][3]
     nscans=hdr['dim'][4]
@@ -201,7 +201,7 @@ def layersmooth(niifile,layfile,fwhm=1,kernelsize=7,nlay=6,parcfile='',lowcut=10
     lay=np.reshape(lay,nvox)
     
     if parcfile != '':
-        parc,hdrparc=loadnii(parcfile,scaling=False)
+        parc,hdrparc=readnii(parcfile,scaling=False)
         mask*=parc
     mask=np.reshape(mask,nvox)
 
