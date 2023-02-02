@@ -7,10 +7,12 @@ Created on Thu Jan 26 00:23:03 2023
 """
 
 import numpy as np
-from python_scripts.wauwternifti import readnii, savenii
-from python_scripts.wauwtermisc import butterworth_filter_3D
+from Python.python_scripts.wauwternifti import readnii, savenii
+from Python.python_scripts.wauwtermisc import butterworth_filter_3D, gaussian_filter_3D, convol_nan_3D
 import os
 from scipy import ndimage
+import json
+import copy
 
 def mp2rage_norm(mp2r_dir,mp2r_file):
     nii,hdr=readnii(mp2r_dir+mp2r_file)
@@ -169,7 +171,80 @@ def atropos_seg(an4_dir,gmin=4,gmax=6):
     hdr['scl_inter']=0
     savenii(segt1,hdr,an4_dir+'segt1.nii')
 
+def fsl_topup_params(json_file,phasedim="y"):
+    with open(json_file) as f:
+        data = json.load(f)
+    te=data['EchoTime']
+    acq_params=np.zeros([2,4],dtype=np.float16)
+    if phasedim=="y":
+        acq_params[0,1]=1
+        acq_params[1,1]=-1
+    elif phasedim=="z":
+        acq_params[0,2]=1
+        acq_params[1,2]=-1
+    else:
+        acq_params[0,0]=1
+        acq_params[1,0]=-1
+    acq_params[:,3]=te
+    jdir=json_file.split('.json')[0]
+    np.savetxt(jdir+'_acq_param.txt', acq_params, fmt='%8.6f')
 
+def layersmooth(niifile,layfile,fwhm=1,kernelsize=7,nlay=6,parcfile='',lowcut=10,suffix='ls'):
+    nii,hdr=loadnii(niifile)
+    lay,hdrlay=loadnii(layfile,scaling=False)
+    
+    nvox=hdr['dim'][1]*hdr['dim'][2]*hdr['dim'][3]
+    nscans=hdr['dim'][4]
+    mask=np.zeros([hdr['dim'][1],hdr['dim'][2],hdr['dim'][3]],dtype=np.int16)
+    mask[np.nanmean(nii,axis=3) > lowcut]=1
+    nii=np.reshape(nii,[nvox,nscans])
+    lay=np.reshape(lay,nvox)
+    
+    if parcfile != '':
+        parc,hdrparc=loadnii(parcfile,scaling=False)
+        mask*=parc
+    mask=np.reshape(mask,nvox)
+
+    layz=np.max(lay)
+    lay=np.ceil(lay/(layz/float(nlay)))
+    
+    ks=kernelsize
+    voxfwhm=fwhm/np.array(hdr['pixdim'][1:4])
+    gsigma=voxfwhm/(2*np.sqrt(2*np.log(2)))
+    gf=gaussian_filter_3D(gsigma,ks)
+    
+    niipad=np.empty([hdr['dim'][1]+(2*ks),hdr['dim'][2]+(2*ks),hdr['dim'][3]+(2*ks),nscans])
+    
+    niic=np.zeros([hdr['dim'][1]+(2*ks),hdr['dim'][2]+(2*ks),hdr['dim'][3]+(2*ks),nscans],dtype=np.float32)
+    niis=np.zeros([nvox,nscans],dtype=np.float32)
+    nvar=np.max(mask)
+    
+    print('Start layer smoothing of '+niifile)
+    for ii in range(1,nvar+1):
+        for jj in range(1,nlay+1):
+            niitmp=copy.deepcopy(nii)
+            niipad[:]=np.nan
+            niic*=0
+            niitmp[(mask!=ii) | (lay!=jj),:]=np.nan
+            niitmp=np.reshape(niitmp,[hdr['dim'][1],hdr['dim'][2],hdr['dim'][3],nscans])
+            niipad[ks:-ks,ks:-ks,ks:-ks,:]=copy.deepcopy(niitmp)
+            for kk in range(nscans):
+                niic[:,:,:,kk]=convol_nan_3D(np.squeeze(niipad[:,:,:,kk]),gf)
+            niicunpad=np.reshape(niic[ks:-ks,ks:-ks,ks:-ks,:],[nvox,nscans])
+            niis[(mask==ii) & (lay==jj),:]=copy.deepcopy(niicunpad[(mask==ii) & (lay==jj),:])
+            print('smoothed '+str(jj) +' of '+str(nlay)+' layers in '+str(ii)+' of '+str(nvar)+' areas')
+    
+    hdr['datatype']=16
+    hdr['bitpix']=32
+    hdr['scl_slope']=1
+    hdr['scl_inter']=0
+    niis=np.reshape(niis,[hdr['dim'][1],hdr['dim'][2],hdr['dim'][3],nscans]).astype(np.float32)
+    niistring=niifile.split('.')
+    if niistring[-1]=='gz':
+        newnii=niistring[0]+'-'+suffix+'.'+niistring[1]+'.'+niistring[2]
+    else:
+        newnii=niistring[0]+'-'+suffix+'.'+niistring[1]       
+    savenii(niis,hdr,newnii)
 
 
 

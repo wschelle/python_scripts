@@ -253,6 +253,7 @@ def getniicoor(nifti_file):
     fx=hdr['dim'][1]
     fy=hdr['dim'][2]
     fz=hdr['dim'][3]
+    q=hdr['pixdim'][0]
     sx=hdr['pixdim'][1]
     sy=hdr['pixdim'][2]
     sz=hdr['pixdim'][3]
@@ -272,8 +273,24 @@ def getniicoor(nifti_file):
     for i in range(fx):
         for j in range(fy):
             for k in range(fz):
-                im = np.array([(i+1)*sx, (j+1)*sy, (k+1)*sz])
-                coor[i,j,k,:] = R * im + qoff
+                im = np.array([(i+1)*sx, (j+1)*sy, (k+1)*sz*q])
+                #coor[i,j,k,:] = R * im + qoff
+                coor[i,j,k,:] = np.multiply(R,im) + qoff
     
     return(coor)
+
+def copy_nifti_orientation(ref_nii, source_nii, output_nii):
+    hdr0=readnii(ref_nii,header_only=True)
+    nii1,hdr1=readnii(source_nii,scaling=False)
+    hdr1['qoffset_x']=hdr0['qoffset_x']
+    hdr1['qoffset_y']=hdr0['qoffset_y']
+    hdr1['qoffset_z']=hdr0['qoffset_z']
+    hdr1['quatern_b']=hdr0['quatern_b']
+    hdr1['quatern_c']=hdr0['quatern_c']
+    hdr1['quatern_d']=hdr0['quatern_d']
+    hdr1['srow_x']=hdr0['srow_x']
+    hdr1['srow_y']=hdr0['srow_y']
+    hdr1['srow_z']=hdr0['srow_z']
+    savenii(nii1,hdr1,output_nii)
+    
     
