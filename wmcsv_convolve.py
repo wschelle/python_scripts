@@ -8,7 +8,7 @@ import pandas as pd
 import numpy as np
 import copy
 from scipy.interpolate import interp1d
-from python_scripts.wauwterfmri import gloverhrf
+from Python.python_scripts.wauwterfmri import gloverhrf
 
 def wmcsv_convolve(csvfile):
     df=pd.read_csv(csvfile)

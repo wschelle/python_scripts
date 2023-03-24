@@ -13,7 +13,7 @@ from sklearn import linear_model
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
 from scipy.interpolate import interp1d
-from wmcsv_convolve import wmcsv_convolve
+from Python.python_scripts.wmcsv_convolve import wmcsv_convolve
 
 
 ntrial=32

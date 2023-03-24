@@ -16,6 +16,7 @@ from scipy.interpolate import interp1d
 import copy
 from scipy import stats
 from statsmodels.stats.multitest import multipletests
+from tqdm import tqdm
 
 def gloverhrf(hrflen,timestep):
     from nipy.modalities.fmri import hrf, utils
@@ -66,7 +67,7 @@ def hpfilt(dat,tr,cut,addfilt=0,mask=0,convperc=0):
     datsize=dat.shape
     nfac=datsize[0]
     ntime=datsize[1]
-    dat2=np.zeros([int(nfac),int(ntime)])
+    dat2=np.zeros([int(nfac),int(ntime)],dtype=np.float32)
     nfilt=np.floor(2*(ntime*(tr/1.)*cut))
     fm=cosfilt(int(nfilt),int(ntime))
     if np.sum(addfilt) != 0:
@@ -74,7 +75,7 @@ def hpfilt(dat,tr,cut,addfilt=0,mask=0,convperc=0):
     if np.sum(mask) == 0:
         mask=np.ones(nfac)
     dispmat(fm)
-    for i in range(nfac):
+    for i in tqdm(range(nfac)):
         if mask[i] != 0:
             reg.fit(fm.T, dat[i,:])
             if convperc != 0:
@@ -92,12 +93,12 @@ def rval2tval(R,N):
 def mreg(dm,dat,mask):
     dmsize=dm.shape
     datsize=dat.shape
-    betas=np.zeros([datsize[0],dmsize[0]+1])
-    msres=np.zeros([datsize[0]])
+    betas=np.zeros([datsize[0],dmsize[0]+1],dtype=np.float32)
+    msres=np.zeros([datsize[0]],dtype=np.float32)
     reg = LinearRegression()
     for i in range(dmsize[0]):
         dm[i,:]-=np.mean(dm[i,:])
-    for i in range(datsize[0]):
+    for i in tqdm(range(datsize[0])):
         if mask[i] != 0:
             reg.fit(dm.T,dat[i,:])
             betas[i,0:dmsize[0]]=reg.coef_
@@ -120,7 +121,7 @@ def tcon(contrast,dm,betas,msres,mask):
     t1=np.zeros([nfac+1,1])
     #term2=transpose(c)#invert(x#transpose(x))#c
     t2=c[0:nfac,0].T @ np.linalg.inv(dm @ dm.T) @ c[0:nfac,0]
-    for i in range(bsize[0]):
+    for i in tqdm(range(bsize[0])):
         if mask[i] != 0:
             t1[:,0]=betas[i,:]
             tval[i]=c.T @ t1 / (np.sqrt(msres[i]*t2))
@@ -193,7 +194,7 @@ def prf_est(dm,dat,mask):
     fwhm=2*np.sqrt(2*np.log(2))
     for i in range(nfac):
         dm[i,:]-=np.mean(dm[i,:])
-    for i in range(nv):
+    for i in tqdm(range(nv)):
         if mask[i] != 0:
             reg.fit(dm.T,dat[i,:])
             prfa[i]=np.max(reg.coef_)
@@ -218,7 +219,7 @@ def lmfit_prf(params, dm, ydata):
     return (ymodel - ydata)
     
 def make_fir(fironset,firlength,maxtime):
-    firmatrix=np.zeros([(np.max(fironset[:,0])+1)*firlength,maxtime])
+    firmatrix=np.zeros([int(np.max(fironset[:,0])+1)*firlength,maxtime])
     for i in range(len(fironset[:,0])):
         for j in range(firlength):
             if fironset[i,1]+j < maxtime:
@@ -232,7 +233,7 @@ def calc_fir(firmatrix,datamatrix,mask):
     nv=datamatrix.shape[0]
     nf=firmatrix.shape[0]
     firfit=np.zeros([nv,nf])
-    for i in range(nv):
+    for i in tqdm(range(nv)):
         if mask[i] != 0:
             reg.fit(firmatrix.T,datamatrix[i,:])
             firfit[i,:]=reg.coef_
@@ -255,7 +256,7 @@ def nrprf_est(nrprf_center,nrprf_sigma,task_matrix,data_matrix,mask):
     rsq=np.zeros(nr_datapoints)
     nrprf_matrix=np.zeros([nr_datapoints,nr_factors+4])
     reg = LinearRegression()
-    for i in range(nr_datapoints):
+    for i in tqdm(range(nr_datapoints)):
         if mask[i]!=0:
             reg.fit(task_matrix.T,data_matrix[i,:])
             ordinal_regress[i,:]=copy.deepcopy(reg.coef_)
@@ -278,7 +279,7 @@ def lmfit_nrprf(params, dm, ydata):
     ampl = params['ampl'].value
     ymodelpos=np.zeros(dm.shape)
     ymodelneg=np.zeros(dm.shape)
-    for i in range(dm.shape[0]):
+    for i in tqdm(range(dm.shape[0])):
         ymodelpos[i,:]=dm[i,:] * np.exp(-(params['p'+str(i)].value - (center*2))**2 / (2*sigma**2))
         ymodelneg[i,:]=dm[i,:] * np.exp(-(params['p'+str(i)].value - 0)**2 / (2*sigma**2))
     ymodelpos=np.sum(ymodelpos,axis=0)    
@@ -288,15 +289,39 @@ def lmfit_nrprf(params, dm, ydata):
     ymodel+=cons
     return (ymodel - ydata)
 
-def multiple_comparison(t_stat,n_observ,alpha=0.05,method='hs'):
-    t_stat0=t_stat[t_stat!=0]
-    uncorr_pval0 = stats.t.sf(np.abs(t_stat0), n_observ-1)*2
+def lmfit_1DGauss(params,xrange,ydata):
+    gauss=gaussian1D(xrange,params['cons'],params['ampl'],params['center'],params['sigma'])
+    return(gauss-ydata)
+
+def multiple_comparison(statistic,dof,alpha=0.05,method='fdr_by',test='t',tail=2):
+    stat0=statistic[statistic!=0]
+    if test=='t':
+        uncorr_pval0 = stats.t.sf(np.abs(stat0), dof-1)*tail
+    if test=='f':
+        uncorr_pval0 = 1-stats.f.cdf(stat0, dof[0], dof[1])
     corr_pval0=multipletests(uncorr_pval0,alpha,method=method)
-    uncorr_pval=np.ones(t_stat.shape)
-    uncorr_pval[t_stat!=0]=uncorr_pval0
-    corr_pval=np.ones(t_stat.shape)
-    corr_pval[t_stat!=0]=corr_pval0[1]
+    uncorr_pval=np.ones(statistic.shape)
+    uncorr_pval[statistic!=0]=uncorr_pval0
+    corr_pval=np.ones(statistic.shape)
+    corr_pval[statistic!=0]=corr_pval0[1]
     return(uncorr_pval,corr_pval)
+
+def goodness_of_fit_F(modelfit,data,mask,dof,chisq=None):
+    #modelfit & data should be of the same size (datapoints,time)
+    #mask is of shape datapoints
+    #dof is 2-element list: [model DoF,ErrorDoF]
+    #optional: provide chisq values of size datapoints
+    #returns array size datapoints with F-statistics
+    fval=np.zeros(mask.shape)
+    msm=np.zeros(mask.shape)
+    for i in tqdm(range(mask.shape)):
+        if mask[i]!=0:
+            msm[i]=np.sum((np.mean(data[i,:])-modelfit[i,:])**2)/dof[0]
+    if chisq==None:
+        chisq=np.sum((data-modelfit)**2,axis=1)
+    mse=chisq/dof[1]
+    fval=msm/mse
+    return(fval)
     
 def inverselog_hrf(timerange,hrfparams):
     # HRF params should be an array with following structure:
@@ -308,13 +333,15 @@ def inverselog_hrf(timerange,hrfparams):
     # np.array([-0.1, 0.0, 0.3, 1.4, 3., 0.8, -2.1, 10.0, 1.8, 0.8, 15.0, 1., 0.0])
     f1=(timerange-hrfparams[1])/hrfparams[2]
     f2=(timerange-hrfparams[4])/hrfparams[5]
-    f3=(timerange-hrfparams[7])/hrfparams[8]
     l1=1/(1+np.exp(-f1))
     l2=1/(1+np.exp(-f2))
-    l3=1/(1+np.exp(-f3))
-    hrf = hrfparams[0]*l1 + hrfparams[3]*l2 + hrfparams[6]*l3
-    if len(hrfparams)==10:
-        hrf += hrfparams[9]
+    hrf = hrfparams[0]*l1 + hrfparams[3]*l2 
+    if len(hrfparams)==7:
+        hrf += hrfparams[6]
+    elif len(hrfparams)==10:
+        f3=(timerange-hrfparams[7])/hrfparams[8]
+        l3=1/(1+np.exp(-f3))
+        hrf += (hrfparams[6]*l3 + hrfparams[9])
     else:
         f4=(timerange-hrfparams[10])/hrfparams[11]
         l4=1/(1+np.exp(-f4))
@@ -322,9 +349,17 @@ def inverselog_hrf(timerange,hrfparams):
     return(hrf)
 
 def lmfit_ilhrf(params, timerange, ydata):
-    hrfparams=np.array([params['A1'].value,params['T1'].value,params['D1'].value,
-                        params['A2'].value,params['T2'].value,params['D2'].value,
-                        params['A3'].value,params['T3'].value,params['D3'].value,
-                        params['A4'].value,params['T4'].value,params['D4'].value,params['C'].value])
+    if len(params) == 7:
+        hrfparams=np.array([params['A1'].value,params['T1'].value,params['D1'].value,
+                            params['A2'].value,params['T2'].value,params['D2'].value,params['C'].value])
+    elif len(params) == 10:
+        hrfparams=np.array([params['A1'].value,params['T1'].value,params['D1'].value,
+                            params['A2'].value,params['T2'].value,params['D2'].value,
+                            params['A3'].value,params['T3'].value,params['D3'].value,params['C'].value])
+    else:
+        hrfparams=np.array([params['A1'].value,params['T1'].value,params['D1'].value,
+                            params['A2'].value,params['T2'].value,params['D2'].value,
+                            params['A3'].value,params['T3'].value,params['D3'].value,
+                            params['A4'].value,params['T4'].value,params['D4'].value,params['C'].value])
     hrf=inverselog_hrf(timerange,hrfparams)
     return (hrf - ydata)

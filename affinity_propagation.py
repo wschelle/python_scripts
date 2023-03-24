@@ -13,11 +13,10 @@ def aff_prop_a(A,R,lambda_damp):
     # 'Makes availability matrix'
     # 'Supply availability (A) and responsibility (R) matrix'
     # 'Keyword: lambda (default=0.5)'
-    N=len(R[0,:])
-    rowcol=np.arange(0,N)
+    N=R.shape[1]
     A_update = copy.deepcopy(R)
     A_update[A_update < 0] = 0
-    A_update[rowcol,rowcol] = 0
+    A_update[range(N),range(N)] = 0
     A_update = np.sum(A_update,axis=0)
     A_update += np.diagonal(R)
     A_update = np.tile(A_update,(N,1))
@@ -28,9 +27,9 @@ def aff_prop_a(A,R,lambda_damp):
     A_update[A_update > 0] = 0
     
     R2 = copy.deepcopy(R)
-    R2[rowcol,rowcol] = 0
+    R2[range(N),range(N)] = 0
     R2[R2 < 0] = 0
-    A_update[rowcol,rowcol] = np.sum(R2,axis=0)
+    A_update[range(N),range(N)] = np.sum(R2,axis=0)
     
     A = (1-lambda_damp)*A_update + lambda_damp*A
     return(A)
@@ -42,16 +41,16 @@ def aff_prop_r(S,A,R,lambda_damp):
     # 'Supply similarity (S), availability (A), and responsibility (R) matrix'
     # 'Keyword: lambda (default=0.5)'
     
-    rowcol=np.arange(0,S.shape[1])
-    N=len(rowcol)
+    N=S.shape[1]
     SA=S+A
-    SA[rowcol,rowcol]=-np.inf
+    SA[range(N),range(N)]=-np.inf
     
-    first_max=np.max(SA,axis=1)
+    #first_max=np.max(SA,axis=1)
     idx_max=np.argmax(SA,axis=1)
     SA[range(N),idx_max]=-np.inf
     second_max=np.max(SA,axis=1)
-    maxmat=np.ones([N,N])
+    del SA
+    maxmat=np.ones([N,N],dtype=np.float32)
     maxmat[range(N),idx_max]=second_max
     R_update = S - maxmat
     R = (1 - lambda_damp) * R_update + lambda_damp * R
@@ -66,7 +65,7 @@ def aff_prop_s(M,preference,prefmultiply):
     # 'Keyword: preference (default=median(S)), prefmultiply (default=1)'
 
     sizeM=M.shape
-    S=np.zeros([sizeM[0],sizeM[0]])
+    S=np.zeros([sizeM[0],sizeM[0]],dtype=np.float32)
     if len(sizeM)==1:
         tmp=np.tile(M,(sizeM[0],1))
         S+=(-(tmp-tmp.T)**2)

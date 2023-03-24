@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from Python.python_scripts.wauwternifti import readnii
 
-def nii_movie(niifile,slicex=None,slicey=None,slicez=None,windowheight=6,colmap='gray',speed=10,scale=20):
+def nii_movie(niifile,slicex=None,slicey=None,slicez=None,windowheight=6,colmap='gray',speed=10,scale=75):
     if isinstance(niifile,str):
         nii,hdr=readnii(niifile)
     else:
@@ -24,10 +24,16 @@ def nii_movie(niifile,slicex=None,slicey=None,slicez=None,windowheight=6,colmap=
     global sx, sy, sz, frame, frl
     if slicex==None:
         sx=niisize[0]//2
+    else:
+        sx=slicex
     if slicey==None:
         sy=niisize[1]//2
+    else:
+        sy=slicey
     if slicez==None:
         sz=niisize[2]//2
+    else:
+        sz=slicez
     frl=niisize[3]
     frame=0
     
