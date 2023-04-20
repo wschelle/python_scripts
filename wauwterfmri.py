@@ -62,7 +62,7 @@ def loadmp(mpfile):
     mp=mp.T
     return(mp)
 
-def hpfilt(dat,tr,cut,addfilt=0,mask=0,convperc=0):
+def hpfilt(dat,tr,cut,addfilt=0,mask=0,convperc=0,showfiltmat=True):
     reg = LinearRegression()
     datsize=dat.shape
     nfac=datsize[0]
@@ -74,7 +74,8 @@ def hpfilt(dat,tr,cut,addfilt=0,mask=0,convperc=0):
         fm=np.concatenate([fm,addfilt])
     if np.sum(mask) == 0:
         mask=np.ones(nfac)
-    dispmat(fm)
+    if showfiltmat:
+        dispmat(fm)
     for i in tqdm(range(nfac)):
         if mask[i] != 0:
             reg.fit(fm.T, dat[i,:])
@@ -217,6 +218,38 @@ def lmfit_prf(params, dm, ydata):
     ymodel*=ampl
     ymodel+=cons
     return (ymodel - ydata)
+
+def prf2d(designmatrix,p0,xgrid,ygrid):
+    xs=designmatrix.shape
+    x2=np.zeros(xs,dtype=np.float32)
+    # xdiff = np.arange(xs[0],dtype=np.float32)
+    # ydiff = np.arange(xs[1],dtype=np.float32)
+    # xdiff, ydiff = np.meshgrid(xdiff, ydiff)
+    xdiff=xgrid-p0[2]
+    ydiff=ygrid-p0[3]
+    xdiff**=2
+    ydiff**=2
+    xdiff/=(p0[4]**2)
+    ydiff/=((p0[4]/p0[5])**2)
+    num=xdiff+ydiff
+    expo=np.exp(-num/2)
+    x2 = np.tensordot(designmatrix,expo, axes=([0,1],[0,1]))
+    x2/=np.nanmax(x2)
+    x2[np.isnan(x2)]=0
+    x2*=p0[1]
+    x2+=p0[0]
+    return(x2)
+
+def lmfit_prf2d(params,designmatrix,ydata,xgrid,ygrid):
+    p0=np.zeros(6,dtype=np.float32)
+    p0[0]=params['cons'].value
+    p0[1]=params['amp'].value
+    p0[2]=params['centerX'].value
+    p0[3]=params['centerY'].value
+    p0[4]=params['XYsigma'].value
+    p0[5]=params['XYsigmaRatio'].value
+    ymodel=prf2d(designmatrix,p0,xgrid,ygrid)
+    return(ymodel-ydata)
     
 def make_fir(fironset,firlength,maxtime):
     firmatrix=np.zeros([int(np.max(fironset[:,0])+1)*firlength,maxtime])
@@ -293,18 +326,21 @@ def lmfit_1DGauss(params,xrange,ydata):
     gauss=gaussian1D(xrange,params['cons'],params['ampl'],params['center'],params['sigma'])
     return(gauss-ydata)
 
-def multiple_comparison(statistic,dof,alpha=0.05,method='fdr_by',test='t',tail=2):
+def multiple_comparison(statistic,dfn=None,dfd=None,alpha=0.05,method='fdr_bh',test='t',tail=2,cutoff_only=False):
     stat0=statistic[statistic!=0]
     if test=='t':
-        uncorr_pval0 = stats.t.sf(np.abs(stat0), dof-1)*tail
+        uncorr_pval0 = stats.t.sf(np.abs(stat0), dfn-1)*tail
     if test=='f':
-        uncorr_pval0 = 1-stats.f.cdf(stat0, dof[0], dof[1])
+        uncorr_pval0 = 1-stats.f.cdf(stat0, dfn, dfd)
     corr_pval0=multipletests(uncorr_pval0,alpha,method=method)
     uncorr_pval=np.ones(statistic.shape)
     uncorr_pval[statistic!=0]=uncorr_pval0
     corr_pval=np.ones(statistic.shape)
     corr_pval[statistic!=0]=corr_pval0[1]
-    return(uncorr_pval,corr_pval)
+    if cutoff_only:
+        return(np.min(stat0[corr_pval<alpha]))
+    else:
+        return(uncorr_pval,corr_pval)
 
 def goodness_of_fit_F(modelfit,data,mask,dof,chisq=None):
     #modelfit & data should be of the same size (datapoints,time)

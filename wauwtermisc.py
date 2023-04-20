@@ -53,3 +53,32 @@ def convol_nan_3D(data,kernel,fillnan=False):
                     result[i-ksx,j-ksy,k-ksz]=np.nansum(tmp)/np.sum(kernel[~np.isnan(tmp)])
     return(result)
     
+def satterthwaite_dof(data,group_column=None,data_column=None,group_column_idx=0,data_column_idx=0):
+    if group_column==None:
+        groups=unique(data[:,group_column_idx])
+        groupvar=np.zeros([len(groups),2])
+        for i in range(len(groups)):
+            groupvar[i,0]=np.std(data[data[:,group_column_idx]==groups[i],data_column_idx])**2
+            groupvar[i,1]=np.sum(data[:,group_column_idx]==groups[i])
+    else:
+        groups=unique(data[group_column])
+        groupvar=np.zeros([len(groups),2])
+        groupdat=data[data_column]
+        for i in range(len(groups)):
+            groupvar[i,0]=np.std(groupdat[data[group_column]==groups[i]])**2
+            groupvar[i,1]=np.sum(data[group_column]==groups[i])
+    #print('groupvar: ',groupvar)
+    term1=0
+    term2=0
+    for i in range(len(groups)):
+        term1+=groupvar[i,0]/groupvar[i,1]
+        term2+=(groupvar[i,0]/groupvar[i,1])**2 / (groupvar[i,1]-1)
+    term1=term1**2
+    dof=term1/term2
+    #print('term1: ',term1)
+    #print('term2: ',term2)
+    return(dof)
+
+def rebin(a, shape):
+    sh = shape[0],a.shape[0]//shape[0],shape[1],a.shape[1]//shape[1]
+    return a.reshape(sh).mean(-1).mean(1)
