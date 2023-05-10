@@ -91,6 +91,16 @@ def rval2tval(R,N):
     t = numerator / denominator
     return(t)
 
+def mult_R2(designmatrix):
+    mcc=np.zeros(designmatrix.shape[0],dtype=np.float32)
+    clist=np.arange(designmatrix.shape[0],dtype=np.int16)
+    reg = LinearRegression()
+    for i in range(designmatrix.shape[0]):
+        reg.fit(designmatrix[clist[clist != i],:].T, designmatrix[i,:])
+        tmp = reg.predict(designmatrix[clist[clist != i],:].T)
+        mcc[i] = r2_score(designmatrix[i,:],tmp)
+    return mcc
+
 def mreg(dm,dat,mask):
     dmsize=dm.shape
     datsize=dat.shape
@@ -399,3 +409,23 @@ def lmfit_ilhrf(params, timerange, ydata):
                             params['A4'].value,params['T4'].value,params['D4'].value,params['C'].value])
     hrf=inverselog_hrf(timerange,hrfparams)
     return (hrf - ydata)
+
+# def gppi(designmatrix,seedtimeseries,contrasts=None):
+#     if contrasts==None:
+#         contrasts=np.ones(designmatrix.shape[0])
+        
+#     ppi_mat=copy.deepcopy(designmatrix)
+#     for i in range(designmatrix.shape[0]):
+#         #ppi_mat[i,:]-=np.min(ppi_mat[i,:])
+#         ppi_mat[i,:]/=np.max(ppi_mat[i,:])
+#         ppi_mat[i,:]-=0.5
+#         ppi_mat[i,:]*=contrasts[i]
+#         ppi_mat[i,:]*=seedtimeseries
+        
+#     ppi_mat=np.vstack([designmatrix,seedtimeseries,ppi_mat])
+#     return(ppi_mat)
+    
+    
+    
+    
+    
