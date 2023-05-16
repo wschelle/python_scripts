@@ -69,9 +69,9 @@ def readnii(nifti_file,header_only=False,scaling=True):
     else:
         data_start=int(header['vox_offset'])
         totalsize=1
-        for i in header['dim'][1:]:
+        for i in header['dim'][1:header['dim'][0]+1]:
             totalsize*=i
-        data_dims=header['dim'][1:]
+        data_dims=header['dim'][1:header['dim'][0]+1]
         if header['datatype']==0:
             print('Yeah... We from data support are just as clueless as you. Going home.')
             return(header)
@@ -274,8 +274,7 @@ def getniicoor(nifti_file):
         for j in range(fy):
             for k in range(fz):
                 im = np.array([(i+1)*sx, (j+1)*sy, (k+1)*sz*q])
-                #coor[i,j,k,:] = R * im + qoff
-                coor[i,j,k,:] = np.multiply(R,im) + qoff
+                coor[i,j,k,:] = R @ im + qoff
     
     return(coor)
 
