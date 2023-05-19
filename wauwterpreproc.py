@@ -89,7 +89,7 @@ def fillgaps(nii_dir, nii_file, gap=0, fillthres=14, boxsize=3, minv=1, maxv=Non
             for k in range(boxmin,nii.shape[2]-boxmax):
                 if (nii[i,j,k]==gap) & (np.sum(nii[i-boxmin:i+boxmax+1,j-boxmin:j+boxmax+1,k-boxmin:k+boxmax+1]==gap) <= maxgaps):
                     hg,loc=np.histogram(nii[i-boxmin:i+boxmax+1,j-boxmin:j+boxmax+1,k-boxmin:k+boxmax+1],bins=np.max(nii[i-boxmin:i+boxmax+1,j-boxmin:j+boxmax+1,k-boxmin:k+boxmax+1]))
-                    maxloc=loc[np.where(hg == np.max(hg))]
+                    maxloc=loc[np.where(hg == np.max(hg))]+1
                     maxloc=maxloc[0]
                     if (maxloc >= minv) & (maxloc <= maxv) & (np.max(hg) >= fillthres):
                         nii[i,j,k]=maxloc
@@ -202,8 +202,9 @@ def layersmooth(niifile,layfile,fwhm=1,kernelsize=7,nlay=6,parcfile='',lowcut=10
     
     if parcfile != '':
         parc,hdrparc=readnii(parcfile,scaling=False)
-        mask*=parc
+        mask*=parc.astype(np.int16)
     mask=np.reshape(mask,nvox)
+    del parc
 
     layz=np.max(lay)
     lay=np.ceil(lay/(layz/float(nlay)))
