@@ -13,6 +13,7 @@ from sklearn.metrics import r2_score
 import datetime
 import nibabel as nib
 from scipy.interpolate import interp1d
+from scipy.linalg import toeplitz
 import copy
 from scipy import stats
 from statsmodels.stats.multitest import multipletests
@@ -116,6 +117,67 @@ def mreg(dm,dat,mask):
             betas[i,dmsize[0]]=reg.intercept_
             msres[i]=(np.sum((dat[i,:]-reg.predict(dm.T))**2))/(datsize[1]-dmsize[0]-1)
     return(betas,msres)
+
+def GLM(X, Y, mask, norm_X=True, add_const=True, beta_only=False, betaresid_only=True):
+    if norm_X:
+        for i in range(X.shape[0]):
+            X-=np.mean(X[i,:])
+    if add_const:
+        X=np.vstack((X,np.ones(X.shape[1])))
+        
+    beta=np.zeros([Y.shape[0],X.shape[0]],dtype=np.float32)
+    yhat=np.zeros(Y.shape,dtype=np.float32)
+    
+    X=X.T #because my X is normally of shape [factor,time], which is transposed here
+
+    for i in tqdm(range(Y.shape[0])):
+        if mask[i] != 0:
+            beta[i,:] = np.linalg.inv(X.T @ X) @ X.T @ Y[i,:]
+            yhat[i,:] = X @ beta[i,:]
+        
+    residuals=Y-yhat
+    msres=np.sum(residuals**2,axis=1)/(X.shape[0]-X.shape[1]-1)
+    
+    if beta_only:
+        return beta
+    elif betaresid_only:
+        return beta,msres
+    else:
+        return beta,msres,yhat
+    
+def GLS(X, Y, mask, norm_X=True, add_const=True, beta_only=False, betaresid_only=True):
+    if norm_X:
+        for i in range(X.shape[0]):
+            X-=np.mean(X[i,:])
+            
+    if add_const:
+        X=np.vstack((X,np.ones(X.shape[1])))
+        
+    beta=np.zeros([Y.shape[0],X.shape[0]],dtype=np.float32)
+    yhat=np.zeros(Y.shape,dtype=np.float32)
+    X=X.T
+    
+    for i in tqdm(range(Y.shape[0])):
+        if mask[i] != 0:
+            beta_0 = np.linalg.inv(X.T @ X) @ X.T @ Y[i,:]
+            yhat_0 = X @ beta_0
+            res0 = Y[i,:] - yhat_0
+            res1 = np.roll(res0,1)
+            phi = (res0 - res0.mean()) @ (res1 - res1.mean()) / np.sqrt(np.sum((res0 - res0.mean()) ** 2) * np.sum((res1 - res1.mean()) ** 2))
+            V = phi ** toeplitz(np.arange(res0.size))
+            V = np.linalg.inv(V)
+            beta[i,:] = np.linalg.inv(X.T @ V @ X) @ X.T @ V @ Y[i,:]
+            yhat[i,:] = X @ beta[i,:]
+    
+    residuals = Y - yhat
+    msres=np.sum(residuals**2,axis=1)/(X.shape[0]-X.shape[1]-1)
+    
+    if beta_only:
+        return beta
+    elif betaresid_only:
+        return beta,msres
+    else:
+        return beta,msres,yhat
 
 def tcon(contrast,dm,betas,msres,mask):
     bsize=betas.shape
