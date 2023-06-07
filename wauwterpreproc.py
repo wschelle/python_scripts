@@ -13,6 +13,7 @@ import os
 from scipy import ndimage
 import json
 import copy
+from tqdm import tqdm
 
 def mp2rage_norm(mp2r_dir,mp2r_file):
     nii,hdr=readnii(mp2r_dir+mp2r_file)

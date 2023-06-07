@@ -27,11 +27,19 @@ def gloverhrf(hrflen,timestep):
     hrf/=np.max(hrf)
     return(hrf)
 
+def gammahrf(hrflen,timestep):
+    from nipy.modalities.fmri.hrf import spm_hrf_compat
+    t = np.arange(0,hrflen,timestep)
+    hrf=spm_hrf_compat(t, peak_delay=5.5, under_delay=12, peak_disp=1, under_disp=1, p_u_ratio=2.5, normalize=True)
+    #hrf=spm_hrf_compat(t, peak_delay=6, under_delay=16, peak_disp=1, under_disp=1, p_u_ratio=6, normalize=True)
+    hrf/=np.max(hrf)
+    return(hrf)
+
 def hrf_convolve(onsets,maxtime,TR=1,upsample_factor=10):
     nr_factors=int(np.max(onsets[:,0])+1)
     nr_events=int(onsets.shape[0])
     fmat=np.zeros([nr_factors,int(maxtime*upsample_factor)])
-    hrf=gloverhrf(25,1/upsample_factor)
+    hrf=gammahrf(25,1/upsample_factor)
     fmat_conv=np.zeros([nr_factors,int(maxtime*upsample_factor+len(hrf)-1)])
     fmat_conv_intp=np.zeros([nr_factors,int(maxtime/TR)])
     for i in range(nr_events):
@@ -41,7 +49,7 @@ def hrf_convolve(onsets,maxtime,TR=1,upsample_factor=10):
     for i in range(nr_factors):
         fmat_conv[i,:]=np.convolve(fmat[i,:], hrf)
         fmat_conv[i,:]/=np.max(fmat_conv[i,:])
-        fcon = interp1d(realtime,fmat_conv[i,0:int(maxtime*upsample_factor)],kind='cubic')
+        fcon = interp1d(realtime[0:int(maxtime*upsample_factor)],fmat_conv[i,0:int(maxtime*upsample_factor)],kind='cubic')
         fmat_conv_intp[i,:] = fcon(scantime)
     return(fmat_conv_intp)
         
@@ -64,26 +72,36 @@ def loadmp(mpfile):
     return(mp)
 
 def hpfilt(dat,tr,cut,addfilt=0,mask=0,convperc=0,showfiltmat=True):
-    reg = LinearRegression()
+    #reg = LinearRegression()
     datsize=dat.shape
     nfac=datsize[0]
     ntime=datsize[1]
     dat2=np.zeros([int(nfac),int(ntime)],dtype=np.float32)
-    nfilt=np.floor(2*(ntime*(tr/1.)*cut))
-    fm=cosfilt(int(nfilt),int(ntime))
+    nfilt=int(np.floor(2*(ntime*(tr/1.)*cut)))
+    fm=cosfilt(nfilt,int(ntime))
+    yhat=np.zeros(dat.shape,dtype=np.float32)
     if np.sum(addfilt) != 0:
         fm=np.concatenate([fm,addfilt])
+        nfilt+=addfilt.shape[0]
     if np.sum(mask) == 0:
         mask=np.ones(nfac)
+    for i in range(nfilt):
+        fm-=np.mean(fm[i,:])
+    fm=np.vstack((fm,np.ones(ntime)))
+    nfilt+=1
     if showfiltmat:
         dispmat(fm)
+    beta=np.zeros([nfac,nfilt],dtype=np.float32)
+    fm=fm.T
     for i in tqdm(range(nfac)):
         if mask[i] != 0:
-            reg.fit(fm.T, dat[i,:])
+            #reg.fit(fm.T, dat[i,:])
+            beta[i,:] = np.linalg.inv(fm.T @ fm) @ fm.T @ dat[i,:]
+            yhat[i,:] = fm @ beta[i,:]
             if convperc != 0:
-                dat2[i,:]=(dat[i,:]-reg.predict(fm.T))/reg.intercept_*100
+                dat2[i,:]=(dat[i,:]-yhat[i,:])/beta[i,-1]*100
             else:
-                dat2[i,:]=(dat[i,:]-reg.predict(fm.T))  
+                dat2[i,:]=dat[i,:]-yhat[i,:]
     return(dat2)
 
 def rval2tval(R,N):
