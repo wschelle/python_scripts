@@ -28,8 +28,13 @@ print('layer mask: '+layfile)
 print('ROI mask: '+roifile)
 print('VTS onsets: '+vtsfile)
 
-rdir=niifile[:-42]
-sub=niifile[-42:-37]
+if niifile[-9:-7]=='ls':
+    rdir=niifile[:-42]
+    sub=niifile[-42:-37]
+else:
+    rdir=niifile[:-39]
+    sub=niifile[-39:-34]
+    
 ddir=rdir+sub+'/derivatives/'
 ndir=ddir+'nii/'
 fdir=ddir+'figures/'

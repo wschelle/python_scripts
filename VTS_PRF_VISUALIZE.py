@@ -48,6 +48,7 @@ ampl,hdrc=readnii(ndir+'pRF_amplitude.nii.gz')
 lay,hdrl=readnii(layfile)
 roi,hdrr=readnii(roifile)
 fval,hdrf=readnii(ndir+'pRF_goodness-of-fit-F.nii.gz')
+rsq,hdrr=readnii(ndir+'pRF_Rsquared.nii.gz')
 
 fx=hdrc['dim'][1];fy=hdrc['dim'][2];fz=hdrc['dim'][3]
 nvox=fx*fy*fz
@@ -84,6 +85,7 @@ roi[roi==4]=2
 roi[roi==6]=4
 roi[roi>6]=0
 
+rsq=np.reshape(rsq,nvox)
 fval=np.reshape(fval,nvox)
 fval2=deepcopy(fval)
 fval2[fval>0]-=np.min(fval[fval>0])
@@ -127,7 +129,7 @@ for i in range(nroi):
         ax.set_zlabel('FH')
         ax.set_title('pRFc_digit '+roitits[i]+' '+laytits[j]+' layers')
         fig.colorbar(p, ax=ax, shrink=0.65)
-        plt.show()
+        #plt.show()
         angles = np.linspace(0,360,121)[:-1]
         rotanimate(ax, angles,fdir+'pRFc-digits-'+roitits[i]+'-'+laytits[j]+'.gif',delay=6,width=5,heigth=5)
         
@@ -144,7 +146,7 @@ for i in range(nroi):
         ax.set_zlabel('FH')
         ax.set_title('pRFc_phalanx '+roitits[i]+' '+laytits[j]+' layers')
         fig.colorbar(p, ax=ax, shrink=0.65)
-        plt.show()
+        #plt.show()
         angles = np.linspace(0,360,121)[:-1]
         rotanimate(ax, angles,fdir+'pRFc-phalanx-'+roitits[i]+'-'+laytits[j]+'.gif',delay=6,width=5,heigth=5) 
         
@@ -161,7 +163,7 @@ for i in range(nroi):
         ax.set_zlabel('FH')
         ax.set_title('pRFs '+roitits[i]+' '+laytits[j]+' layers')
         fig.colorbar(p, ax=ax, shrink=0.65)
-        plt.show()
+        #plt.show()
         angles = np.linspace(0,360,121)[:-1]
         rotanimate(ax, angles,fdir+'pRFs-mean'+roitits[i]+'-'+laytits[j]+'.gif',delay=6,width=5,heigth=5) 
 
@@ -248,7 +250,7 @@ for i in range(nroi):
     if i==4:
         axes[i].legend()
 plt.savefig(fdir+'pRFs-between-digit_vs_pRFc-digits.png',dpi=300)
-plt.show()
+#plt.show()
 
 xax=np.arange(ndig2)+1
 fig, axes = plt.subplots(1, nroi, figsize=(15,5))
@@ -267,7 +269,7 @@ for i in range(nroi):
     if i==4:
         axes[i].legend()
 plt.savefig(fdir+'pRFs-within-digit_vs_pRFc-digits.png',dpi=300)
-plt.show()
+#plt.show()
 
 xax=np.arange(ndig2)+1
 fig, axes = plt.subplots(1, nroi, figsize=(15,5))
@@ -286,7 +288,7 @@ for i in range(nroi):
     if i==4:
         axes[i].legend()
 plt.savefig(fdir+'BOLD-amplitude_vs_pRFc-digits.png',dpi=300)
-plt.show()
+#plt.show()
 
 xax=np.arange(nlay)+1
 fig, axes = plt.subplots(1, nroi, figsize=(15,5))
@@ -304,7 +306,7 @@ for i in range(nroi):
     if i==4:
         axes[i].legend()
 plt.savefig(fdir+'pRFs-between-digit_vs_layers.png',dpi=300)
-plt.show()
+#plt.show()
 
 xax=np.arange(nlay)+1
 fig, axes = plt.subplots(1, nroi, figsize=(15,5))
@@ -322,7 +324,7 @@ for i in range(nroi):
     if i==4:
         axes[i].legend()
 plt.savefig(fdir+'pRFs-within-digit_vs_layers.png',dpi=300)
-plt.show()
+#plt.show()
 
 
 xax=np.arange(nlay)+1
@@ -341,7 +343,27 @@ for i in range(nroi):
     if i==4:
         axes[i].legend()
 plt.savefig(fdir+'BOLD-amplitude_vs_layers.png',dpi=300)
-plt.show()
+#plt.show()
 
+
+nvx=np.sum(fval>fth)
+lmmtits=['roi','lay','prfc_dig','prfc_phal','prfs_dig','prfs_phal','ampl','fval','rsq','locX','locY','locZ']
+lmm=np.zeros([nvx,len(lmmtits)],dtype=np.float32)
+lmm[:,0]=roi[fval>fth]
+lmm[:,1]=lay[fval>fth]
+lmm[:,2]=prfc2[fval>fth]
+lmm[:,3]=prfc4[fval>fth]
+lmm[:,4]=prfs1[fval>fth]
+lmm[:,5]=prfs2[fval>fth]
+lmm[:,6]=ampl[fval>fth]
+lmm[:,7]=fval[fval>fth]
+lmm[:,8]=rsq[fval>fth]
+lmm[:,9]=niic[fval>fth,0]
+lmm[:,10]=niic[fval>fth,1]
+lmm[:,11]=niic[fval>fth,2]
+
+lmmtits0="roi\tlay\tprfc_dig\tprfc_phal\tprfs_dig\tprfs_phal\tampl\tfval\trsq\tlocX\tlocY\tlocZ"
+fmt = "\t".join(["%s"] + ["%10.6e"] * (lmm.shape[1]-1))
+np.savetxt(fdir+'pRF.tsv', lmm, fmt=fmt, header=lmmtits0, delimiter ='\t')
 
 
