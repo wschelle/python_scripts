@@ -103,7 +103,7 @@ def fillgaps(nii_dir, nii_file, gap=0, fillthres=14, boxsize=3, minv=1, maxv=Non
     savenii(nii,hdr,nii_dir+'fill_'+nii_file)
 
 
-def atropos_seg(an4_dir,gmin=4,gmax=6):
+def atropos_seg(an4_dir,gmin=4,gmax=6,reversed_contrast=False,weirdMP2R_contrast=False,gmid=5):
     
     an4files=[]
     for f in os.listdir(an4_dir):
@@ -119,12 +119,22 @@ def atropos_seg(an4_dir,gmin=4,gmax=6):
     an4pos[an4pos >= 0.1]=1
     an4pos[an4pos < 0.1]=0
     
-    csf=np.sum(an4pos[:,:,:,0:gmin-1],axis=3)
-    gm=np.sum(an4pos[:,:,:,gmin-1:gmax],axis=3)
-    wm=np.sum(an4pos[:,:,:,gmax:],axis=3)
-    csf[csf >= 1]=1
-    gm[gm >= 1]=1
-    wm[wm >= 1]=1
+    if reversed_contrast:
+        csf=np.sum(an4pos[:,:,:,gmax:],axis=3)
+        gm=np.sum(an4pos[:,:,:,gmin-1:gmax],axis=3)
+        wm=np.sum(an4pos[:,:,:,0:gmin-1],axis=3)
+    elif weirdMP2R_contrast:
+        csf=np.sum(an4pos[:,:,:,gmax-1:],axis=3)
+        gm=np.sum(an4pos[:,:,:,gmin-1:gmid],axis=3)
+        wm=np.sum(an4pos[:,:,:,gmid:gmax-1],axis=3)
+    else:    
+        csf=np.sum(an4pos[:,:,:,0:gmin-1],axis=3)
+        gm=np.sum(an4pos[:,:,:,gmin-1:gmax],axis=3)
+        wm=np.sum(an4pos[:,:,:,gmax:],axis=3)
+        
+    # csf[csf >= 1]=1
+    # gm[gm >= 1]=1
+    # wm[wm >= 1]=1
     
     fwhm=2*np.sqrt(2*np.log(2))*hdr['pixdim'][1]
     smm=0.75
@@ -134,9 +144,14 @@ def atropos_seg(an4_dir,gmin=4,gmax=6):
     gm = ndimage.gaussian_filter(gm, sigma, mode='mirror')
     wm = ndimage.gaussian_filter(wm, sigma, mode='mirror')
     
-    csf[csf>=0.7]=1
-    wm[wm>=0.7]=1
-    gm[gm>=0.3]=1
+    if weirdMP2R_contrast:
+        csf[csf>=0.05]=1
+        wm[wm>=0.05]=1
+        gm[gm>=0.05]=1
+    else:
+        csf[csf>=0.7]=1
+        wm[wm>=0.7]=1
+        gm[gm>=0.3]=1
     
     csfgm=np.zeros(t1.shape)
     gmwm=np.zeros(t1.shape)
@@ -162,9 +177,14 @@ def atropos_seg(an4_dir,gmin=4,gmax=6):
                     gmwm[i,j,k]=1
         
     segt1=np.zeros(t1.shape,dtype=np.int32)
-    segt1[csfgm==1]=1
-    segt1[gmwm==1]=2
-    segt1[gm==1]=3
+    if weirdMP2R_contrast:
+        segt1[gmwm==1]=2
+        segt1[csfgm==1]=1
+        segt1[gm==1]=3
+    else:
+        segt1[csfgm==1]=1
+        segt1[gmwm==1]=2
+        segt1[gm==1]=3
     
     hdr['datatype']=8
     hdr['bitpix']=32
