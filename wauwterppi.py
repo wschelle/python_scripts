@@ -10,25 +10,25 @@ import copy
 from scipy.signal import correlate
 from scipy.ndimage import gaussian_filter1d
 from Python.pybold_master.pybold.hrf_model import spm_hrf
-from Python.pybold_master.pybold.bold_signal import deconv
+#from Python.pybold_master.pybold.bold_signal import deconv
 #from Python.python_scripts.wauwterfmri import gloverhrf
 
-def bold_deconvolve(timeseries,hrf=None,TR=1,nb_iter=100):
-    if hrf is None:
-        hrf_dur = 30
-        true_hrf_delta = 1.5
-        hrf, t_hrf = spm_hrf(t_r=TR, delta=true_hrf_delta, dur=hrf_dur)
+# def bold_deconvolve(timeseries,hrf=None,TR=1,nb_iter=100):
+#     if hrf is None:
+#         hrf_dur = 30
+#         true_hrf_delta = 1.5
+#         hrf, t_hrf = spm_hrf(t_r=TR, delta=true_hrf_delta, dur=hrf_dur)
     
-    params = {'y': timeseries,
-              't_r': TR,
-              'hrf': hrf,
-              'lbda': None,
-              'nb_iter': nb_iter,
-              'verbose': 1,
-              }
+#     params = {'y': timeseries,
+#               't_r': TR,
+#               'hrf': hrf,
+#               'lbda': None,
+#               'nb_iter': nb_iter,
+#               'verbose': 1,
+#               }
     
-    est_ar_s, est_ai_s, est_i_s, J, R, G = deconv(**params)
-    return est_ar_s, est_ai_s, est_i_s
+#     est_ar_s, est_ai_s, est_i_s, J, R, G = deconv(**params)
+#     return est_ar_s, est_ai_s, est_i_s
 
 def gppi(designmatrix,seedtimeseries,contrasts=None):
     

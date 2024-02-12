@@ -69,9 +69,9 @@ def readnii(nifti_file,header_only=False,scaling=True):
     else:
         data_start=int(header['vox_offset'])
         totalsize=1
-        for i in header['dim'][1:header['dim'][0]+1]:
+        for i in header['dim'][1:]:
             totalsize*=i
-        data_dims=header['dim'][1:header['dim'][0]+1]
+        data_dims=header['dim'][1:]
         if header['datatype']==0:
             print('Yeah... We from data support are just as clueless as you. Going home.')
             return(header)
@@ -273,7 +273,10 @@ def getniicoor(nifti_file):
     for i in range(fx):
         for j in range(fy):
             for k in range(fz):
-                im = np.array([(i+1)*sx, (j+1)*sy, (k+1)*sz*q])
+                #im = np.array([(i+1)*sx, (j+1)*sy, (k+1)*sz*q])
+                im = np.array([(i+0.5)*sx, (j+0.5)*sy, (k+0.5)*sz*q])
+                #coor[i,j,k,:] = R * im + qoff
+                #coor[i,j,k,:] = np.multiply(R,im) + qoff
                 coor[i,j,k,:] = R @ im + qoff
     
     return(coor)
@@ -281,6 +284,8 @@ def getniicoor(nifti_file):
 def copy_nifti_orientation(ref_nii, source_nii, output_nii):
     hdr0=readnii(ref_nii,header_only=True)
     nii1,hdr1=readnii(source_nii,scaling=False)
+    hdr1['qform_code']=hdr0['qform_code']
+    hdr1['sform_code']=hdr0['sform_code']
     hdr1['qoffset_x']=hdr0['qoffset_x']
     hdr1['qoffset_y']=hdr0['qoffset_y']
     hdr1['qoffset_z']=hdr0['qoffset_z']
@@ -290,6 +295,7 @@ def copy_nifti_orientation(ref_nii, source_nii, output_nii):
     hdr1['srow_x']=hdr0['srow_x']
     hdr1['srow_y']=hdr0['srow_y']
     hdr1['srow_z']=hdr0['srow_z']
+    hdr1['vox_offset']=352
     savenii(nii1,hdr1,output_nii)
     
     

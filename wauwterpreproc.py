@@ -74,7 +74,7 @@ def survey_norm(survey_dir,survey_file,cutoff=3,order=1.75,minmask=150):
     hdr['scl_slope']=1
     savenii(nii_adjusted,hdr,survey_dir+'i'+survey_file)
 
-def fillgaps(nii_dir, nii_file, gap=0, fillthres=14, boxsize=3, minv=1, maxv=None):
+def fillgaps(nii_dir, nii_file, gap=0, fillthres=None, boxsize=3, minv=1, maxv=None, helperfile=None):
     nii,hdr=readnii(nii_dir+nii_file,scaling=False)
     
     boxmin=int((boxsize-1)//2)
@@ -83,23 +83,42 @@ def fillgaps(nii_dir, nii_file, gap=0, fillthres=14, boxsize=3, minv=1, maxv=Non
         maxv=np.max(nii)
     
     boxtotal=boxsize**3
+    if not fillthres:
+        fillthres=boxtotal//2
     maxgaps=boxtotal-fillthres
     
+    if helperfile:
+        nii2,hdr2=readnii(helperfile,scaling=False)
+        for i in range(boxmin,nii.shape[0]-boxmax):
+            for j in range(boxmin,nii.shape[1]-boxmax):
+                for k in range(boxmin,nii.shape[2]-boxmax):
+                    if (nii[i,j,k]==gap) & (nii2[i,j,k]!=0) & (np.max(nii[i-boxmin:i+boxmax+1,j-boxmin:j+boxmax+1,k-boxmin:k+boxmax+1])>0):
+                        hg,loc=np.histogram(nii[i-boxmin:i+boxmax+1,j-boxmin:j+boxmax+1,k-boxmin:k+boxmax+1],bins=int(np.max(nii[i-boxmin:i+boxmax+1,j-boxmin:j+boxmax+1,k-boxmin:k+boxmax+1])))
+                        loc=loc[:-1]
+                        hg=hg[loc!=gap]
+                        loc=loc[loc!=gap]
+                        if len(loc) > 0:
+                            maxloc=loc[np.where(hg == np.max(hg))][0]+1
+                        else:
+                            maxloc=np.max(nii[i-boxmin:i+boxmax+1,j-boxmin:j+boxmax+1,k-boxmin:k+boxmax+1])
+                        nii[i,j,k]=maxloc
+          
     for i in range(boxmin,nii.shape[0]-boxmax):
         for j in range(boxmin,nii.shape[1]-boxmax):
             for k in range(boxmin,nii.shape[2]-boxmax):
                 if (nii[i,j,k]==gap) & (np.sum(nii[i-boxmin:i+boxmax+1,j-boxmin:j+boxmax+1,k-boxmin:k+boxmax+1]==gap) <= maxgaps):
-                    hg,loc=np.histogram(nii[i-boxmin:i+boxmax+1,j-boxmin:j+boxmax+1,k-boxmin:k+boxmax+1],bins=np.max(nii[i-boxmin:i+boxmax+1,j-boxmin:j+boxmax+1,k-boxmin:k+boxmax+1]))
+                    hg,loc=np.histogram(nii[i-boxmin:i+boxmax+1,j-boxmin:j+boxmax+1,k-boxmin:k+boxmax+1],bins=int(np.max(nii[i-boxmin:i+boxmax+1,j-boxmin:j+boxmax+1,k-boxmin:k+boxmax+1])))
                     maxloc=loc[np.where(hg == np.max(hg))]+1
                     maxloc=maxloc[0]
                     if (maxloc >= minv) & (maxloc <= maxv) & (np.max(hg) >= fillthres):
                         nii[i,j,k]=maxloc
                         
-    nii=nii.astype(np.int32)
-    hdr['datatype']=8
-    hdr['bitpix']=32
+    nii=nii.astype(np.int16)
+    hdr['datatype']=4
+    hdr['bitpix']=16
     hdr['scl_slope']=1
     hdr['scl_inter']=0
+    hdr['vox_offset']=352
     savenii(nii,hdr,nii_dir+'fill_'+nii_file)
 
 
@@ -128,8 +147,8 @@ def atropos_seg(an4_dir,gmin=4,gmax=6,reversed_contrast=False,weirdMP2R_contrast
         gm=np.sum(an4pos[:,:,:,gmin-1:gmid],axis=3)
         wm=np.sum(an4pos[:,:,:,gmid:gmax-1],axis=3)
     else:    
-        csf=np.sum(an4pos[:,:,:,0:gmin-1],axis=3)
-        gm=np.sum(an4pos[:,:,:,gmin-1:gmax],axis=3)
+        csf=np.sum(an4pos[:,:,:,0:gmin],axis=3)
+        gm=np.sum(an4pos[:,:,:,gmin:gmax],axis=3)
         wm=np.sum(an4pos[:,:,:,gmax:],axis=3)
         
     # csf[csf >= 1]=1
@@ -186,11 +205,76 @@ def atropos_seg(an4_dir,gmin=4,gmax=6,reversed_contrast=False,weirdMP2R_contrast
         segt1[gmwm==1]=2
         segt1[gm==1]=3
     
+    for i in range(t1.shape[0]):
+        for j in range(t1.shape[1]):
+            for k in range(t1.shape[2]):
+                minx=i-1
+                maxx=i+2
+                miny=j-1
+                maxy=j+2
+                minz=k-1
+                maxz=k+2
+                if minx < 0: minx=0
+                if miny < 0: miny=0
+                if minz < 0: minz=0
+                if maxx > t1.shape[0]: maxx=t1.shape[0]
+                if maxy > t1.shape[1]: maxy=t1.shape[1]
+                if maxz > t1.shape[2]: maxz=t1.shape[2]
+                if (segt1[i,j,k]==3) & (np.sum(segt1[minx:maxx,miny:maxy,minz:maxz]==0)>0):
+                    for ii in range(minx,maxx):
+                        for jj in range(miny,maxy):
+                            for kk in range(minz,maxz):
+                                if (segt1[ii,jj,kk]==0)&(t1[ii,jj,kk]<=t1[i,j,k]):
+                                    segt1[ii,jj,kk]=1
+                                if (segt1[ii,jj,kk]==0)&(t1[ii,jj,kk]>t1[i,j,k]):
+                                    segt1[ii,jj,kk]=2
+                    
     hdr['datatype']=8
     hdr['bitpix']=32
     hdr['scl_slope']=1
     hdr['scl_inter']=0
     savenii(segt1,hdr,an4_dir+'segt1.nii')
+
+def MP2Rclass_seg(gm_file,wm_file,csf_file,out_file):
+    
+    gm,hdrg=readnii(gm_file)
+    wm,hdrw=readnii(wm_file)
+    csf,hdrc=readnii(csf_file)
+            
+    segt1=np.zeros(gm.shape,dtype=np.int16)
+    segt1[gm >= 0.05]=3
+    
+    for i in range(gm.shape[0]):
+        for j in range(gm.shape[1]):
+            for k in range(gm.shape[2]):
+                minx=i-1
+                maxx=i+2
+                miny=j-1
+                maxy=j+2
+                minz=k-1
+                maxz=k+2
+                if minx < 0: minx=0
+                if miny < 0: miny=0
+                if minz < 0: minz=0
+                if maxx > gm.shape[0]: maxx=gm.shape[0]
+                if maxy > gm.shape[1]: maxy=gm.shape[1]
+                if maxz > gm.shape[2]: maxz=gm.shape[2]
+                if (segt1[i,j,k]==0) & (np.sum(segt1[minx:maxx,miny:maxy,minz:maxz]==3)>0):
+                    if wm[i,j,k] > csf[i,j,k]:
+                        segt1[i,j,k]=2
+                    elif csf[i,j,k] > wm[i,j,k]:
+                        segt1[i,j,k]=1
+                    elif np.sum(wm[minx:maxx,miny:maxy,minz:maxz]) > np.sum(csf[minx:maxx,miny:maxy,minz:maxz]):
+                        segt1[i,j,k]=2
+                    else:
+                        segt1[i,j,k]=1
+
+    hdrg['datatype']=4
+    hdrg['bitpix']=16
+    hdrg['scl_slope']=1
+    hdrg['scl_inter']=0
+    hdrg['vox_offset']=352
+    savenii(segt1,hdrg,out_file)
 
 def fsl_topup_params(json_file,phasedim="y"):
     with open(json_file) as f:
@@ -354,9 +438,9 @@ def laysmo(niifile,layfile,fwhm=1,kernelsize=7,nlay=6,layedge=0,parcfile='',lowc
     hdr['vox_offset']=352
     niistring=niifile.split('.')
     if niistring[-1]=='gz':
-        newnii=niistring[0]+'-'+suffix+'.'+niistring[1]+'.'+niistring[2]
+        newnii=niistring[0]+'_'+suffix+'.'+niistring[1]+'.'+niistring[2]
     else:
-        newnii=niistring[0]+'-'+suffix+'.'+niistring[1]       
+        newnii=niistring[0]+'_'+suffix+'.'+niistring[1]       
     savenii(niic.astype(np.float32),hdr,newnii)
 
 

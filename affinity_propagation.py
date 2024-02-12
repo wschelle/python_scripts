@@ -35,7 +35,7 @@ def aff_prop_a(A,R,lambda_damp):
     return(A)
 
 
-def aff_prop_r(S,A,R,lambda_damp):
+def aff_prop_r(S,A,R,lambda_damp,bit16):
     # 'Affinitity Propagation clustering'
     # 'Makes responsibility matrix'
     # 'Supply similarity (S), availability (A), and responsibility (R) matrix'
@@ -50,22 +50,29 @@ def aff_prop_r(S,A,R,lambda_damp):
     SA[range(N),idx_max]=-np.inf
     second_max=np.max(SA,axis=1)
     del SA
-    maxmat=np.ones([N,N],dtype=np.float32)
+    if bit16==1:
+        maxmat=np.ones([N,N],dtype=np.float16)
+    else:
+        maxmat=np.ones([N,N],dtype=np.float32)
     maxmat[range(N),idx_max]=second_max
     R_update = S - maxmat
     R = (1 - lambda_damp) * R_update + lambda_damp * R
     return(R)
   
-def aff_prop_s(M,preference,prefmultiply):
+def aff_prop_s(M,preference,prefmultiply,bit16):
     # 'Affinitity Propagation clustering'
     # 'Makes similaritiy matrix'
     # 'supply matrix: [points,observations]'
     # 'Example: M=[100,3] for 100 points with 3 values each (e.g. x,y,z)'
     # 'Returns similarity matrix S (e.g. [100,100])'
     # 'Keyword: preference (default=median(S)), prefmultiply (default=1)'
-
+    print('Making similarity matrix...')
     sizeM=M.shape
-    S=np.zeros([sizeM[0],sizeM[0]],dtype=np.float32)
+    if bit16==1:
+        S=np.zeros([sizeM[0],sizeM[0]],dtype=np.float16)
+    else:
+        S=np.zeros([sizeM[0],sizeM[0]],dtype=np.float32)
+        
     if len(sizeM)==1:
         tmp=np.tile(M,(sizeM[0],1))
         S+=(-(tmp-tmp.T)**2)
@@ -77,9 +84,10 @@ def aff_prop_s(M,preference,prefmultiply):
         preference=np.median(S)
     preference*=prefmultiply
     S[np.arange(0,sizeM[0]),np.arange(0,sizeM[0])]=preference
+    print('Done.')
     return(S)
 
-def aff_prop(M,preference=None,prefmultiply=1,lambda_damp=0.5,maxiter=10,maxtries=10000,verbose=False):
+def aff_prop(M,preference=None,prefmultiply=1,lambda_damp=0.5,maxiter=10,maxtries=10000,verbose=False,bit16=0):
     # 'Affinitity Propagation clustering for IDL, and for Python :)'
     # 'Supply matrix: [points,observations]'
     # 'Example: M=[100,3] for 100 points with 3 values each (e.g. x,y,z)'
@@ -88,11 +96,16 @@ def aff_prop(M,preference=None,prefmultiply=1,lambda_damp=0.5,maxiter=10,maxtrie
     # 'Each entry of the returned label array refers to the index of its exemplar'
     # 'Keyword: preference (default=median similarity). How likely points choose themself as exemplar. Ranges from [-inf,0]'
     # 'Keyword: prefmultiply (default=1). Scales the preference relative to the median'
-    # 'Keyword: lambda (default=0.5). Damping of the iterative updating routine (higher=slower)'
+    # 'Keyword: lambda_damp (default=0.5). Damping of the iterative updating routine (higher=slower)'
     # 'Keyword: maxiter (default=10). Max iterations of the same label outcome'
     # 'Keyword: maxtries (default=10000). Max nr of tries. Useful if stuck in loop'
     # 'Keyword: verb. Print label iteration and nr tries'
-    S=aff_prop_s(M,preference,prefmultiply)
+    # 'Keyword: bit16 (default=0). 16-bit instead of 32-bit precision'
+    
+    if bit16==1:
+        M=M.astype(np.float16)
+        
+    S=aff_prop_s(M,preference,prefmultiply,bit16)
     
     SM=M.shape
     R=copy.deepcopy(S)*0
@@ -102,8 +115,9 @@ def aff_prop(M,preference=None,prefmultiply=1,lambda_damp=0.5,maxiter=10,maxtrie
     now=0
     ntries=0
     
+    print('Starting convergence loop.')
     while ((now < maxiter) & (ntries < maxtries)):
-        R=aff_prop_r(S,A,R,lambda_damp)
+        R=aff_prop_r(S,A,R,lambda_damp,bit16)
         A=aff_prop_a(A,R,lambda_damp)
         solut=A+R
         maxsolut=np.max(solut,axis=1)

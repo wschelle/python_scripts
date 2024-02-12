@@ -187,10 +187,11 @@ def wm_onsets_V2(csvfile,precision=1,firstart=-1,revert_precision=False):
     # 4 input & 4 output + 1 match conditions (base setup)
     f1=np.zeros([ntrial*2+nmatch,3],dtype=np.float32)
     f1[0:ntrial,0]=scon
-    f1[np.where(scon==0),1]=np.round(starts1[np.where(scon==0)]+firstart)
-    f1[np.where((scon>0)&(df['SampleBox1'][1:-1]==1)),1]=np.round(starts1[np.where((scon>0)&(df['SampleBox1'][1:-1]==1))]+firstart)
-    f1[np.where((scon>0)&(df['SampleBox1'][1:-1]==0)&(df['SampleBox2'][1:-1]==1)),1]=np.round(starts2[np.where((scon>0)&(df['SampleBox1'][1:-1]==0)&(df['SampleBox2'][1:-1]==1))]+firstart)
-    f1[np.where((scon>0)&(df['SampleBox1'][1:-1]==0)&(df['SampleBox2'][1:-1]==0)&(df['SampleBox3'][1:-1]==1)),1]=np.round(starts3[np.where((scon>0)&(df['SampleBox1'][1:-1]==0)&(df['SampleBox2'][1:-1]==0)&(df['SampleBox3'][1:-1]==1))]+firstart)
+    f1[0:ntrial,1]=np.round(starts1+firstart)
+    # f1[np.where(scon==0),1]=np.round(starts1[np.where(scon==0)]+firstart)
+    # f1[np.where((scon>0)&(df['SampleBox1'][1:-1]==1)),1]=np.round(starts1[np.where((scon>0)&(df['SampleBox1'][1:-1]==1))]+firstart)
+    # f1[np.where((scon>0)&(df['SampleBox1'][1:-1]==0)&(df['SampleBox2'][1:-1]==1)),1]=np.round(starts2[np.where((scon>0)&(df['SampleBox1'][1:-1]==0)&(df['SampleBox2'][1:-1]==1))]+firstart)
+    # f1[np.where((scon>0)&(df['SampleBox1'][1:-1]==0)&(df['SampleBox2'][1:-1]==0)&(df['SampleBox3'][1:-1]==1)),1]=np.round(starts3[np.where((scon>0)&(df['SampleBox1'][1:-1]==0)&(df['SampleBox2'][1:-1]==0)&(df['SampleBox3'][1:-1]==1))]+firstart)
     f1[np.where(scon==0),2]=sdur*ncat
     f1[np.where(scon>0),2]=sdur*scon[np.where(scon>0)]
     f1[ntrial:2*ntrial,0]=pcon+ncons
@@ -260,3 +261,494 @@ def wm_onsets_V2(csvfile,precision=1,firstart=-1,revert_precision=False):
         f3[:,1]/=precision
     
     return(f1,f2,f3)
+
+def wm_onsets_V3(csvfile,precision=1,firstart=0,revert_precision=False):
+    #Design matrix for categorical gating
+    df=pd.read_csv(csvfile)
+
+    sdur=1.
+    pdur=2.
+    mdur=0.5
+
+    scon=df['SampleCon'][1:-1]
+    pcon=df['ProbeCon'][1:-1]
+
+    starttime=df['StartFix.started'][1]
+    starts1=df['InputFig1.started'][1:-1]
+    starts2=df['InputFig2.started'][1:-1]
+    starts3=df['InputFig3.started'][1:-1]
+    startp1=df['OutputFig1.started'][1:-1]
+    startp2=df['OutputFig2.started'][1:-1]
+    startp3=df['OutputFig3.started'][1:-1]
+    startm=df['MatchFig1.started'][1:-1]
+
+    maxwm=df['MaxWM'][1:-1]
+    mcon=df['MatchCon'][1:-1]
+    mtrue=df['MatchTrue'][1:-1]
+    cats=['face','scene','tool']
+    catsp=['f_probe','s_probe','t_probe','x']
+    ncat=len(cats)
+
+    scon=scon.to_numpy()
+    scon = scon[~np.isnan(scon)]
+    pcon=pcon.to_numpy()
+    pcon = pcon[~np.isnan(pcon)]
+    maxwm=maxwm.to_numpy()
+    maxwm = maxwm[~np.isnan(maxwm)]
+    mcon=mcon.to_numpy()
+    mcon = mcon[~np.isnan(mcon)]   
+    mtrue=mtrue.to_numpy()
+    mtrue = mtrue[~np.isnan(mcon)]
+    mcon[(mcon==1)&(mtrue==0)]=2
+    maxwm[maxwm>3]=3
+
+    ncons=np.max(scon)+1
+    ntrial=len(scon)
+    nmatch1=np.sum(mcon==1)
+    nmatch2=np.sum(mcon==2)
+    nmatch=nmatch1+nmatch2
+
+    starts1=starts1.to_numpy()
+    starts2=starts2.to_numpy()
+    starts3=starts3.to_numpy()
+    startp1=startp1.to_numpy()
+    startp2=startp2.to_numpy()
+    startp3=startp3.to_numpy()
+    startm=startm.to_numpy()
+
+    starts1-=starttime
+    starts2-=starttime
+    starts3-=starttime
+    startp1-=starttime
+    startp2-=starttime
+    startp3-=starttime
+    startm-=starttime
+
+    starts1*=precision
+    starts2*=precision
+    starts3*=precision
+    startp1*=precision
+    startp2*=precision
+    startp3*=precision
+    startm*=precision
+
+    firstart*=precision
+    
+    f1=np.zeros([])
+    for i in range(ntrial):
+        for j in enumerate(cats):
+            if (j[1] in df['Sample1'][i+1]) & (df['SampleBox1'][i+1]==1):
+                f1=np.append(f1,[j[0],np.round(starts1[i]+firstart),sdur])
+            if (j[1] in df['Sample2'][i+1]) & (df['SampleBox2'][i+1]==1):
+                f1=np.append(f1,[j[0],np.round(starts2[i]+firstart),sdur])
+            if (j[1] in df['Sample3'][i+1]) & (df['SampleBox3'][i+1]==1):
+                f1=np.append(f1,[j[0],np.round(starts3[i]+firstart),sdur])
+            if (j[1] in df['Sample1'][i+1]) & (df['SampleBox1'][i+1]==0):
+                f1=np.append(f1,[j[0]+3,np.round(starts1[i]+firstart),sdur])
+            if (j[1] in df['Sample2'][i+1]) & (df['SampleBox2'][i+1]==0):
+                f1=np.append(f1,[j[0]+3,np.round(starts2[i]+firstart),sdur])
+            if (j[1] in df['Sample3'][i+1]) & (df['SampleBox3'][i+1]==0):
+                f1=np.append(f1,[j[0]+3,np.round(starts3[i]+firstart),sdur])
+        for k in enumerate(catsp):
+            if (k[1] in df['Probe1'][i+1]):
+                f1=np.append(f1,[k[0]+6,np.round(startp1[i]+firstart),pdur])
+            if (k[1] in df['Probe2'][i+1]):
+                f1=np.append(f1,[k[0]+6,np.round(startp2[i]+firstart),pdur])
+            if (k[1] in df['Probe3'][i+1]):
+                f1=np.append(f1,[k[0]+6,np.round(startp3[i]+firstart),pdur])
+        if mcon[i]==1:
+            f1=np.append(f1,[10,np.round(startm[i]+firstart),mdur])
+        if mcon[i]==2:
+            f1=np.append(f1,[11,np.round(startm[i]+firstart),mdur])
+            
+    f1=np.reshape(f1[1:],[int((f1.shape[0]-1)/3),3])
+    f1=f1[f1[:,1].argsort()]
+    
+    if revert_precision:
+        f1[:,1]/=precision
+    
+    return f1
+
+def wm_onsets_V4(csvfile,precision=1,firstart=0,revert_precision=False):
+    # design matrix specifically for gate switching
+    df=pd.read_csv(csvfile)
+
+    sdur=1.
+    pdur=2.
+    mdur=0.5
+    nstim=3
+
+    scon=df['SampleCon'][1:-1]
+    pcon=df['ProbeCon'][1:-1]
+
+    starttime=df['StartFix.started'][1]
+    starts1=df['InputFig1.started'][1:-1]
+    starts2=df['InputFig2.started'][1:-1]
+    starts3=df['InputFig3.started'][1:-1]
+    startp1=df['OutputFig1.started'][1:-1]
+    startp2=df['OutputFig2.started'][1:-1]
+    startp3=df['OutputFig3.started'][1:-1]
+    startm=df['MatchFig1.started'][1:-1]
+
+    maxwm=df['MaxWM'][1:-1]
+    mcon=df['MatchCon'][1:-1]
+    mtrue=df['MatchTrue'][1:-1]
+    cats=['face','scene','tool']
+    catsp=['f_probe','s_probe','t_probe','x']
+    ncat=len(cats)
+
+    scon=scon.to_numpy()
+    scon = scon[~np.isnan(scon)]
+    pcon=pcon.to_numpy()
+    pcon = pcon[~np.isnan(pcon)]
+    maxwm=maxwm.to_numpy()
+    maxwm = maxwm[~np.isnan(maxwm)]
+    mcon=mcon.to_numpy()
+    mcon = mcon[~np.isnan(mcon)]   
+    mtrue=mtrue.to_numpy()
+    mtrue = mtrue[~np.isnan(mcon)]
+    mcon[(mcon==1)&(mtrue==0)]=2
+    maxwm[maxwm>3]=3
+
+    ncons=np.max(scon)+1
+    ntrial=len(scon)
+    nmatch1=np.sum(mcon==1)
+    nmatch2=np.sum(mcon==2)
+    nmatch=nmatch1+nmatch2
+
+    starts1=starts1.to_numpy()
+    starts2=starts2.to_numpy()
+    starts3=starts3.to_numpy()
+    startp1=startp1.to_numpy()
+    startp2=startp2.to_numpy()
+    startp3=startp3.to_numpy()
+    startm=startm.to_numpy()
+
+    starts1-=starttime
+    starts2-=starttime
+    starts3-=starttime
+    startp1-=starttime
+    startp2-=starttime
+    startp3-=starttime
+    startm-=starttime
+
+    starts1*=precision
+    starts2*=precision
+    starts3*=precision
+    startp1*=precision
+    startp2*=precision
+    startp3*=precision
+    startm*=precision
+
+    firstart*=precision
+    
+    f1=np.zeros([])
+    for i in range(ntrial):
+        if (df['SampleBox1'][i+1]==1):
+            f1=np.append(f1,[1,np.round(starts1[i]+firstart),sdur])
+        if (df['SampleBox1'][i+1]==0):
+            f1=np.append(f1,[0,np.round(starts1[i]+firstart),sdur])
+        if (df['SampleBox2'][i+1]==1):
+            if (df['SampleBox1'][i+1]==1):
+                f1=np.append(f1,[0,np.round(starts2[i]+firstart),sdur])
+            else:
+                f1=np.append(f1,[1,np.round(starts2[i]+firstart),sdur])
+        if (df['SampleBox2'][i+1]==0):
+            if (df['SampleBox1'][i+1]==0):
+                f1=np.append(f1,[0,np.round(starts2[i]+firstart),sdur])
+            else:
+                f1=np.append(f1,[1,np.round(starts2[i]+firstart),sdur])
+        if (df['SampleBox3'][i+1]==1):
+            if (df['SampleBox2'][i+1]==1):
+                f1=np.append(f1,[0,np.round(starts3[i]+firstart),sdur])
+            else:
+                f1=np.append(f1,[1,np.round(starts3[i]+firstart),sdur])
+        if (df['SampleBox3'][i+1]==0):
+            if (df['SampleBox2'][i+1]==0):
+                f1=np.append(f1,[0,np.round(starts3[i]+firstart),sdur])
+            else:
+                f1=np.append(f1,[1,np.round(starts3[i]+firstart),sdur])
+        if ('probe' in df['Probe1'][i+1]):
+            f1=np.append(f1,[3,np.round(startp1[i]+firstart),pdur])
+        if ('x' in df['Probe1'][i+1]):
+            f1=np.append(f1,[2,np.round(startp1[i]+firstart),pdur])
+        if ('probe' in df['Probe2'][i+1]):
+            if ('probe' in df['Probe1'][i+1]):
+                f1=np.append(f1,[2,np.round(startp2[i]+firstart),pdur])
+            else:
+                f1=np.append(f1,[3,np.round(startp2[i]+firstart),pdur])
+        if ('x' in df['Probe2'][i+1]):
+            if ('x' in df['Probe1'][i+1]):
+                f1=np.append(f1,[2,np.round(startp2[i]+firstart),pdur])
+            else:
+                f1=np.append(f1,[3,np.round(startp2[i]+firstart),pdur])
+        if ('probe' in df['Probe3'][i+1]):
+            if ('probe' in df['Probe2'][i+1]):
+                f1=np.append(f1,[2,np.round(startp3[i]+firstart),pdur])
+            else:
+                f1=np.append(f1,[3,np.round(startp3[i]+firstart),pdur])
+        if ('x' in df['Probe3'][i+1]):
+            if ('x' in df['Probe2'][i+1]):
+                f1=np.append(f1,[2,np.round(startp3[i]+firstart),pdur])
+            else:
+                f1=np.append(f1,[3,np.round(startp3[i]+firstart),pdur])        
+        if mcon[i]==1:
+            f1=np.append(f1,[4,np.round(startm[i]+firstart),mdur])
+        if mcon[i]==2:
+            f1=np.append(f1,[5,np.round(startm[i]+firstart),mdur])
+            
+    f1=np.reshape(f1[1:],[int((f1.shape[0]-1)/3),3])
+    f1=f1[f1[:,1].argsort()]
+    
+    if revert_precision:
+        f1[:,1]/=precision
+    
+    return f1
+
+def wm_onsets_V5(csvfile,precision=1,firstart=0,revert_precision=False):
+    #Design matrix categorical open input but aspecific closed input.
+    df=pd.read_csv(csvfile)
+
+    sdur=1.
+    pdur=2.
+    mdur=0.5
+
+    scon=df['SampleCon'][1:-1]
+    pcon=df['ProbeCon'][1:-1]
+
+    starttime=df['StartFix.started'][1]
+    starts1=df['InputFig1.started'][1:-1]
+    starts2=df['InputFig2.started'][1:-1]
+    starts3=df['InputFig3.started'][1:-1]
+    startp1=df['OutputFig1.started'][1:-1]
+    startp2=df['OutputFig2.started'][1:-1]
+    startp3=df['OutputFig3.started'][1:-1]
+    startm=df['MatchFig1.started'][1:-1]
+
+    maxwm=df['MaxWM'][1:-1]
+    mcon=df['MatchCon'][1:-1]
+    mtrue=df['MatchTrue'][1:-1]
+    cats=['face','scene','tool']
+    catsp=['f_probe','s_probe','t_probe','x']
+    ncat=len(cats)
+
+    scon=scon.to_numpy()
+    scon = scon[~np.isnan(scon)]
+    pcon=pcon.to_numpy()
+    pcon = pcon[~np.isnan(pcon)]
+    maxwm=maxwm.to_numpy()
+    maxwm = maxwm[~np.isnan(maxwm)]
+    mcon=mcon.to_numpy()
+    mcon = mcon[~np.isnan(mcon)]   
+    mtrue=mtrue.to_numpy()
+    mtrue = mtrue[~np.isnan(mcon)]
+    mcon[(mcon==1)&(mtrue==0)]=2
+    maxwm[maxwm>3]=3
+
+    ncons=np.max(scon)+1
+    ntrial=len(scon)
+    nmatch1=np.sum(mcon==1)
+    nmatch2=np.sum(mcon==2)
+    nmatch=nmatch1+nmatch2
+
+    starts1=starts1.to_numpy()
+    starts2=starts2.to_numpy()
+    starts3=starts3.to_numpy()
+    startp1=startp1.to_numpy()
+    startp2=startp2.to_numpy()
+    startp3=startp3.to_numpy()
+    startm=startm.to_numpy()
+
+    starts1-=starttime
+    starts2-=starttime
+    starts3-=starttime
+    startp1-=starttime
+    startp2-=starttime
+    startp3-=starttime
+    startm-=starttime
+
+    starts1*=precision
+    starts2*=precision
+    starts3*=precision
+    startp1*=precision
+    startp2*=precision
+    startp3*=precision
+    startm*=precision
+
+    firstart*=precision
+    
+    f1=np.zeros([])
+    for i in range(ntrial):
+        for j in enumerate(cats):
+            if (j[1] in df['Sample1'][i+1]) & (df['SampleBox1'][i+1]==1):
+                f1=np.append(f1,[j[0],np.round(starts1[i]+firstart),sdur])
+            if (j[1] in df['Sample2'][i+1]) & (df['SampleBox2'][i+1]==1):
+                f1=np.append(f1,[j[0],np.round(starts2[i]+firstart),sdur])
+            if (j[1] in df['Sample3'][i+1]) & (df['SampleBox3'][i+1]==1):
+                f1=np.append(f1,[j[0],np.round(starts3[i]+firstart),sdur])
+            if (j[1] in df['Sample1'][i+1]) & (df['SampleBox1'][i+1]==0):
+                f1=np.append(f1,[3,np.round(starts1[i]+firstart),sdur])
+            if (j[1] in df['Sample2'][i+1]) & (df['SampleBox2'][i+1]==0):
+                f1=np.append(f1,[3,np.round(starts2[i]+firstart),sdur])
+            if (j[1] in df['Sample3'][i+1]) & (df['SampleBox3'][i+1]==0):
+                f1=np.append(f1,[3,np.round(starts3[i]+firstart),sdur])
+        for k in enumerate(catsp):
+            if (k[1] in df['Probe1'][i+1]):
+                f1=np.append(f1,[k[0]+4,np.round(startp1[i]+firstart),pdur])
+            if (k[1] in df['Probe2'][i+1]):
+                f1=np.append(f1,[k[0]+4,np.round(startp2[i]+firstart),pdur])
+            if (k[1] in df['Probe3'][i+1]):
+                f1=np.append(f1,[k[0]+4,np.round(startp3[i]+firstart),pdur])
+        if mcon[i]==1:
+            f1=np.append(f1,[8,np.round(startm[i]+firstart),mdur])
+        if mcon[i]==2:
+            f1=np.append(f1,[9,np.round(startm[i]+firstart),mdur])
+            
+    f1=np.reshape(f1[1:],[int((f1.shape[0]-1)/3),3])
+    f1=f1[f1[:,1].argsort()]
+    
+    if revert_precision:
+        f1[:,1]/=precision
+    
+    return f1
+
+def wm_onsets_V6(csvfile,precision=1,firstart=0,revert_precision=False):
+    #Design matrix categorical input n-back overwrite and categorical n-back output.
+    df=pd.read_csv(csvfile)
+
+    sdur=1.
+    pdur=2.
+    mdur=0.5
+
+    scon=df['SampleCon'][1:-1]
+    pcon=df['ProbeCon'][1:-1]
+
+    starttime=df['StartFix.started'][1]
+    starts1=df['InputFig1.started'][1:-1]
+    starts2=df['InputFig2.started'][1:-1]
+    starts3=df['InputFig3.started'][1:-1]
+    startp1=df['OutputFig1.started'][1:-1]
+    startp2=df['OutputFig2.started'][1:-1]
+    startp3=df['OutputFig3.started'][1:-1]
+    startm=df['MatchFig1.started'][1:-1]
+
+    maxwm=df['MaxWM'][1:-1]
+    wmface=df['WMFace'][1:-1]
+    wmscene=df['WMScene'][1:-1]
+    wmtool=df['WMTool'][1:-1]
+    mcon=df['MatchCon'][1:-1]
+    mtrue=df['MatchTrue'][1:-1]
+    cats=['face','scene','tool']
+    #catsp=['f_probe','s_probe','t_probe','x']
+    catsp=['f_probe','s_probe','t_probe']
+    ncat=len(cats)
+
+    scon=scon.to_numpy()
+    scon = scon[~np.isnan(scon)]
+    pcon=pcon.to_numpy()
+    pcon = pcon[~np.isnan(pcon)]
+    maxwm=maxwm.to_numpy()
+    maxwm = maxwm[~np.isnan(maxwm)]
+    wmface=wmface.to_numpy()
+    wmface = wmface[~np.isnan(wmface)]
+    wmscene=wmscene.to_numpy()
+    wmscene = wmscene[~np.isnan(wmscene)]
+    wmtool=wmtool.to_numpy()
+    wmtool = wmtool[~np.isnan(wmtool)]
+    mcon=mcon.to_numpy()
+    mcon = mcon[~np.isnan(mcon)]   
+    mtrue=mtrue.to_numpy()
+    mtrue = mtrue[~np.isnan(mcon)]
+    mcon[(mcon==1)&(mtrue==0)]=2
+    maxwm[maxwm>3]=3
+    
+    maxwmcount=np.zeros((ncat,len(wmtool)),dtype=np.int16)
+    for i in range(1,len(wmface)):
+        if (wmface[i]==wmface[i-1]):
+            maxwmcount[0,i]=maxwmcount[0,i-1]+1
+        if (wmscene[i]==wmscene[i-1]):
+            maxwmcount[1,i]=maxwmcount[1,i-1]+1
+        if (wmtool[i]==wmtool[i-1]):
+            maxwmcount[2,i]=maxwmcount[2,i-1]+1
+    maxwmcount[maxwmcount>=4]=3
+
+    # ncons=np.max(scon)+1
+    ntrial=len(scon)
+    # nmatch1=np.sum(mcon==1)
+    # nmatch2=np.sum(mcon==2)
+    # nmatch=nmatch1+nmatch2
+
+    starts1=starts1.to_numpy()
+    starts2=starts2.to_numpy()
+    starts3=starts3.to_numpy()
+    startp1=startp1.to_numpy()
+    startp2=startp2.to_numpy()
+    startp3=startp3.to_numpy()
+    startm=startm.to_numpy()
+
+    starts1-=starttime
+    starts2-=starttime
+    starts3-=starttime
+    startp1-=starttime
+    startp2-=starttime
+    startp3-=starttime
+    startm-=starttime
+
+    starts1*=precision
+    starts2*=precision
+    starts3*=precision
+    startp1*=precision
+    startp2*=precision
+    startp3*=precision
+    startm*=precision
+
+    firstart*=precision
+    
+    f1=np.zeros([])
+    for i in range(ntrial):
+        for j in enumerate(cats):
+            if i==0:
+                if (j[1] in df['Sample1'][i+1]) & (df['SampleBox1'][i+1]==1):
+                    f1=np.append(f1,[int(j[0]*4),np.round(starts1[i]+firstart),sdur])
+                if (j[1] in df['Sample2'][i+1]) & (df['SampleBox2'][i+1]==1):
+                    f1=np.append(f1,[int(j[0]*4),np.round(starts2[i]+firstart),sdur])
+                if (j[1] in df['Sample3'][i+1]) & (df['SampleBox3'][i+1]==1):
+                    f1=np.append(f1,[int(j[0]*4),np.round(starts3[i]+firstart),sdur])
+            else:
+                if (j[1] in df['Sample1'][i+1]) & (df['SampleBox1'][i+1]==1):
+                    f1=np.append(f1,[int(j[0]*4)+maxwmcount[j[0],i-1],np.round(starts1[i]+firstart),sdur])
+                if (j[1] in df['Sample2'][i+1]) & (df['SampleBox2'][i+1]==1):
+                    f1=np.append(f1,[int(j[0]*4)+maxwmcount[j[0],i-1],np.round(starts2[i]+firstart),sdur])
+                if (j[1] in df['Sample3'][i+1]) & (df['SampleBox3'][i+1]==1):
+                    f1=np.append(f1,[int(j[0]*4)+maxwmcount[j[0],i-1],np.round(starts3[i]+firstart),sdur])
+                if (j[1] in df['Sample1'][i+1]) & (df['SampleBox1'][i+1]==0):
+                    f1=np.append(f1,[j[0]+12,np.round(starts1[i]+firstart),sdur])
+                if (j[1] in df['Sample2'][i+1]) & (df['SampleBox2'][i+1]==0):
+                    f1=np.append(f1,[j[0]+12,np.round(starts2[i]+firstart),sdur])
+                if (j[1] in df['Sample3'][i+1]) & (df['SampleBox3'][i+1]==0):
+                    f1=np.append(f1,[j[0]+12,np.round(starts3[i]+firstart),sdur])
+        for k in enumerate(catsp):
+            if (k[1] in df['Probe1'][i+1]):
+                f1=np.append(f1,[int(k[0]*4)+maxwmcount[k[0],i]+15,np.round(startp1[i]+firstart),pdur])
+            if (k[1] in df['Probe2'][i+1]):
+                f1=np.append(f1,[int(k[0]*4)+maxwmcount[k[0],i]+15,np.round(startp2[i]+firstart),pdur])
+            if (k[1] in df['Probe3'][i+1]):
+                f1=np.append(f1,[int(k[0]*4)+maxwmcount[k[0],i]+15,np.round(startp3[i]+firstart),pdur])
+            if ('x' in df['Probe1'][i+1]):
+                f1=np.append(f1,[27,np.round(startp1[i]+firstart),pdur])
+            if ('x' in df['Probe2'][i+1]):
+                f1=np.append(f1,[28,np.round(startp2[i]+firstart),pdur])
+            if ('x' in df['Probe3'][i+1]):
+                f1=np.append(f1,[29,np.round(startp3[i]+firstart),pdur])
+        if mcon[i]==1:
+            f1=np.append(f1,[30,np.round(startm[i]+firstart),mdur])
+        if mcon[i]==2:
+            f1=np.append(f1,[31,np.round(startm[i]+firstart),mdur])
+            
+    f1=np.reshape(f1[1:],[int((f1.shape[0]-1)/3),3])
+    f1=f1[f1[:,1].argsort()]
+    
+    if revert_precision:
+        f1[:,1]/=precision
+    
+    return f1

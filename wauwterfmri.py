@@ -18,28 +18,42 @@ import copy
 from scipy import stats
 from statsmodels.stats.multitest import multipletests
 from tqdm import tqdm
+from Python.python_scripts.hrf import spm_hrf_compat,lambdify_t,glover,T
 
 def gloverhrf(hrflen,timestep):
-    from nipy.modalities.fmri import hrf, utils
-    hrf_func = utils.lambdify_t(hrf.glover(utils.T))
+    #from nipy.modalities.fmri import hrf, utils
+    #hrf_func = utils.lambdify_t(hrf.glover(utils.T))
+    hrf_func = lambdify_t(glover(T))
     t = np.arange(0,hrflen,timestep)
     hrf=hrf_func(t)
     hrf/=np.max(hrf)
     return(hrf)
 
 def gammahrf(hrflen,timestep):
-    from nipy.modalities.fmri.hrf import spm_hrf_compat
+    #from nipy.modalities.fmri.hrf import spm_hrf_compat
     t = np.arange(0,hrflen,timestep)
     hrf=spm_hrf_compat(t, peak_delay=5.5, under_delay=12, peak_disp=1, under_disp=1, p_u_ratio=2.5, normalize=True)
     #hrf=spm_hrf_compat(t, peak_delay=6, under_delay=16, peak_disp=1, under_disp=1, p_u_ratio=6, normalize=True)
     hrf/=np.max(hrf)
     return(hrf)
 
-def hrf_convolve(onsets,maxtime,TR=1,upsample_factor=10):
+def doublegammahrf(p0,hrflen,timestep):
+    #p0=np.array([6,16,1,1,6,0,1])
+    t = np.arange(0,hrflen,timestep)
+    hrf=spm_hrf_compat(t, peak_delay=p0[0], under_delay=p0[1], peak_disp=p0[2], under_disp=p0[3], p_u_ratio=p0[4], normalize=True)
+    hrf/=np.max(hrf)
+    hrf*=p0[6]
+    hrf+=p0[5]
+    return(hrf)
+
+def hrf_convolve(onsets,maxtime,TR=1,upsample_factor=10,glover_hrf=False,normalize_f=True):
     nr_factors=int(np.max(onsets[:,0])+1)
     nr_events=int(onsets.shape[0])
     fmat=np.zeros([nr_factors,int(maxtime*upsample_factor)])
-    hrf=gammahrf(25,1/upsample_factor)
+    if glover_hrf:
+        hrf=gloverhrf(25,1/upsample_factor)
+    else:
+        hrf=gammahrf(25,1/upsample_factor)
     fmat_conv=np.zeros([nr_factors,int(maxtime*upsample_factor+len(hrf)-1)])
     fmat_conv_intp=np.zeros([nr_factors,int(maxtime/TR)])
     for i in range(nr_events):
@@ -48,9 +62,10 @@ def hrf_convolve(onsets,maxtime,TR=1,upsample_factor=10):
     scantime=np.arange(0,maxtime,TR)
     for i in range(nr_factors):
         fmat_conv[i,:]=np.convolve(fmat[i,:], hrf)
-        fmat_conv[i,:]/=np.max(fmat_conv[i,:])
+        if normalize_f:fmat_conv[i,:]/=np.max(fmat_conv[i,:])
         fcon = interp1d(realtime[0:int(maxtime*upsample_factor)],fmat_conv[i,0:int(maxtime*upsample_factor)],kind='cubic')
         fmat_conv_intp[i,:] = fcon(scantime)
+    if not normalize_f: fmat_conv_intp/=np.max(fmat_conv_intp)
     return(fmat_conv_intp)
         
 def cosfilt(nf,time):
@@ -163,26 +178,32 @@ def GLM(X, Y, mask, norm_X=True, add_const=True, beta_only=False, betaresid_only
     else:
         return beta,msres,yhat
     
-def GLS(X, Y, mask, norm_X=True, add_const=True, beta_only=False, betaresid_only=True):
+def GLS(X, Y, mask, yhat_0, norm_X=True, add_const=True, beta_only=False, betaresid_only=True):
     if norm_X:
         for i in range(X.shape[0]):
             X-=np.mean(X[i,:])
             
     if add_const:
         X=np.vstack((X,np.ones(X.shape[1])))
-        
+    
     beta=np.zeros([Y.shape[0],X.shape[0]],dtype=np.float32)
     yhat=np.zeros(Y.shape,dtype=np.float32)
+    phi=np.zeros(Y.shape[0],dtype=np.float32)
+    
     X=X.T
+    
+    tpl=toeplitz(np.arange(Y.shape[1]))
+    tpl=tpl.astype(np.int32)
     
     for i in tqdm(range(Y.shape[0])):
         if mask[i] != 0:
-            beta_0 = np.linalg.inv(X.T @ X) @ X.T @ Y[i,:]
-            yhat_0 = X @ beta_0
-            res0 = Y[i,:] - yhat_0
+            res0 = Y[i,:] - yhat[i,:]
             res1 = np.roll(res0,1)
-            phi = (res0 - res0.mean()) @ (res1 - res1.mean()) / np.sqrt(np.sum((res0 - res0.mean()) ** 2) * np.sum((res1 - res1.mean()) ** 2))
-            V = phi ** toeplitz(np.arange(res0.size))
+            phi[i] = (res0 - res0.mean()) @ (res1 - res1.mean()) / np.sqrt(np.sum((res0 - res0.mean()) ** 2) * np.sum((res1 - res1.mean()) ** 2))
+    
+    for i in tqdm(range(Y.shape[0])):
+        if mask[i] != 0:
+            V = phi[i] ** tpl
             V = np.linalg.inv(V)
             beta[i,:] = np.linalg.inv(X.T @ V @ X) @ X.T @ V @ Y[i,:]
             yhat[i,:] = X @ beta[i,:]
@@ -285,14 +306,18 @@ def prf_est(dm,dat,mask):
     fwhm=2*np.sqrt(2*np.log(2))
     for i in range(nfac):
         dm[i,:]-=np.mean(dm[i,:])
+    
+    be,re,yh=GLM(dm,dat,mask,betaresid_only=False)
+    co=np.squeeze(be[:,-1])
+    be=be[:,:-1]
+    
     for i in tqdm(range(nv)):
         if mask[i] != 0:
-            reg.fit(dm.T,dat[i,:])
-            prfa[i]=np.max(reg.coef_)
-            prfi[i]=reg.intercept_
-            prfc[i]=np.where(reg.coef_ == np.max(reg.coef_))[0][0]
-            prfs[i]=len(reg.coef_[reg.coef_ > prfa[i]/2])/fwhm
-            prfr[i]=r2_score(dat[i,:],reg.predict(dm.T))
+            prfa[i]=np.max(be[i,:])
+            prfi[i]=co[i]
+            prfc[i]=np.where(be[i,:] == np.max(be[i,:]))[0][0]
+            prfs[i]=np.sum(be[i,:] > prfa[i]/2)/fwhm
+            prfr[i]=np.corrcoef(dat[i,:],yh[i,:])[0][1]**2
     return(prfc,prfs,prfa,prfi,prfr)
 
 def lmfit_prf(params, dm, ydata):
@@ -352,15 +377,8 @@ def make_fir(fironset,firlength,maxtime):
     return(firmatrix)
 
 def calc_fir(firmatrix,datamatrix,mask):
-    reg = LinearRegression()
-    nv=datamatrix.shape[0]
-    nf=firmatrix.shape[0]
-    firfit=np.zeros([nv,nf])
-    for i in tqdm(range(nv)):
-        if mask[i] != 0:
-            reg.fit(firmatrix.T,datamatrix[i,:])
-            firfit[i,:]=reg.coef_
-    return(firfit)
+    b=GLM(firmatrix,datamatrix,mask,norm_X=False,beta_only=True)
+    return b[:,:-1]
 
 def gaussian1D(xrange,const,amplitude,center,sigma):
     numerator=(xrange-center)**2
@@ -416,21 +434,17 @@ def lmfit_1DGauss(params,xrange,ydata):
     gauss=gaussian1D(xrange,params['cons'],params['ampl'],params['center'],params['sigma'])
     return(gauss-ydata)
 
-def multiple_comparison(statistic,dfn=None,dfd=None,alpha=0.05,method='fdr_bh',test='t',tail=2,cutoff_only=False):
+def multiple_comparison(statistic,dfn=None,dfd=None,alpha=0.05,method='fdr_bh',test='t',tail=2,cutoff_only=True):
     stat0=statistic[statistic!=0]
     if test=='t':
-        uncorr_pval0 = stats.t.sf(np.abs(stat0), dfn-1)*tail
+        uncorr_pval = stats.t.sf(np.abs(stat0), dfn-1)*tail
     if test=='f':
-        uncorr_pval0 = 1-stats.f.cdf(stat0, dfn, dfd)
-    corr_pval0=multipletests(uncorr_pval0,alpha,method=method)
-    uncorr_pval=np.ones(statistic.shape)
-    uncorr_pval[statistic!=0]=uncorr_pval0
-    corr_pval=np.ones(statistic.shape)
-    corr_pval[statistic!=0]=corr_pval0[1]
+        uncorr_pval = 1-stats.f.cdf(stat0, dfn, dfd)
+    corr_pval=multipletests(uncorr_pval,alpha,method=method)[1]
     if cutoff_only:
-        return(np.min(stat0[corr_pval<alpha]))
+        return np.min(stat0[(corr_pval<alpha) & (stat0>0)])
     else:
-        return(uncorr_pval,corr_pval)
+        return uncorr_pval,corr_pval
 
 def goodness_of_fit_F(modelfit,data,mask,dof,chisq=None):
     #modelfit & data should be of the same size (datapoints,time)
