@@ -374,7 +374,7 @@ def make_fir(fironset,firlength,maxtime):
                 firmatrix[fironset[i,0]*firlength+j,fironset[i,1]+j]=1
     firmatrix=firmatrix[np.sum(firmatrix,axis=1)>1,:]
     #dispmat(firmat4[0::4,:])
-    return(firmatrix)
+    return firmatrix
 
 def calc_fir(firmatrix,datamatrix,mask):
     b=GLM(firmatrix,datamatrix,mask,norm_X=False,beta_only=True)
@@ -384,51 +384,69 @@ def gaussian1D(xrange,const,amplitude,center,sigma):
     numerator=(xrange-center)**2
     denominator=2*sigma**2
     gauss=amplitude*np.exp(-numerator/denominator)+const
-    return(gauss)
-    
-def nrprf_est(nrprf_center,nrprf_sigma,task_matrix,data_matrix,mask):
-    gauss_pos=gaussian1D(np.arange(-nrprf_center,nrprf_center,0.01),0,1,nrprf_center,nrprf_sigma)
-    gauss_neg=gaussian1D(np.arange(-nrprf_center,nrprf_center,0.01),0,-1,-nrprf_center,nrprf_sigma)
+    return gauss
+
+def nrprf_est(beta_matrix,nrprf_center=3.5,nrprf_sigma=1,stepsize=100):
+    gauss_pos=gaussian1D(np.arange(-nrprf_center,nrprf_center,1/stepsize),0,1,nrprf_center,nrprf_sigma)
+    gauss_neg=gaussian1D(np.arange(-nrprf_center,nrprf_center,1/stepsize),0,-1,-nrprf_center,nrprf_sigma)
     gauss=gauss_pos+gauss_neg
     gauss/=np.max(gauss)
-    nr_factors=task_matrix.shape[0]
-    nr_datapoints=data_matrix.shape[0]
+    nr_factors=beta_matrix.shape[1]-1
+    nr_datapoints=beta_matrix.shape[0]
     ordinal_regress=np.zeros([nr_datapoints,nr_factors])
-    rsq=np.zeros(nr_datapoints)
     nrprf_matrix=np.zeros([nr_datapoints,nr_factors+4])
-    reg = LinearRegression()
     for i in tqdm(range(nr_datapoints)):
-        if mask[i]!=0:
-            reg.fit(task_matrix.T,data_matrix[i,:])
-            ordinal_regress[i,:]=copy.deepcopy(reg.coef_)
+        if np.std(beta_matrix[i,:])!=0:
+            ordinal_regress[i,:]=copy.deepcopy(beta_matrix[i,:-1])
             ordinal_regress[i,:]/=np.max(ordinal_regress[i,:])
             ordinal_regress[i,ordinal_regress[i,:]<gauss[0]]=gauss[0]
-            rsq[i]=r2_score(data_matrix[i,:],reg.predict(task_matrix.T))
             nrprf_matrix[i,0]=nrprf_center
             nrprf_matrix[i,1]=nrprf_sigma
-            nrprf_matrix[i,2]=np.max(reg.coef_)
-            nrprf_matrix[i,3]=reg.intercept_
+            nrprf_matrix[i,2]=np.max(beta_matrix[i,:-1])
+            nrprf_matrix[i,3]=beta_matrix[i,-1]
             for j in range(nr_factors):
                 nrprf_matrix[i,j+4]=np.max(np.where(ordinal_regress[i,j] >= gauss))
-    nrprf_matrix[:,4:]/=100
-    return(nrprf_matrix,rsq)
+    nrprf_matrix[:,4:]/=stepsize
+    return nrprf_matrix
 
-def lmfit_nrprf(params, dm, ydata):
-    center = params['center'].value
-    sigma = params['sigma'].value
-    cons = params['cons'].value
-    ampl = params['ampl'].value
+def nrprf(params,dm):
     ymodelpos=np.zeros(dm.shape)
     ymodelneg=np.zeros(dm.shape)
-    for i in tqdm(range(dm.shape[0])):
-        ymodelpos[i,:]=dm[i,:] * np.exp(-(params['p'+str(i)].value - (center*2))**2 / (2*sigma**2))
-        ymodelneg[i,:]=dm[i,:] * np.exp(-(params['p'+str(i)].value - 0)**2 / (2*sigma**2))
+    for i in range(dm.shape[0]):
+        ymodelpos[i,:]=dm[i,:] * np.exp(-(params['p'+str(i)].value - (params['center'].value*2))**2 / (2*params['sigma'].value**2))
+        ymodelneg[i,:]=dm[i,:] * np.exp(-(params['p'+str(i)].value - 0)**2 / (2*params['sigma'].value**2))
     ymodelpos=np.sum(ymodelpos,axis=0)    
     ymodelneg=np.sum(ymodelneg,axis=0)
     ymodel=ymodelpos+(-ymodelneg)
-    ymodel*=ampl
-    ymodel+=cons
+    ymodel*=params['ampl'].value
+    ymodel+=params['cons'].value
+    return ymodel
+    
+def lmfit_nrprf(params, dm, ydata):
+    ymodel=nrprf(params,dm)
     return (ymodel - ydata)
+
+def nrprf_center_sigma(fitparams,paramstart=4,paramstop=8):
+    fp=fitparams[:,paramstart:paramstop]
+    hwhm=np.sqrt(2*np.log(2))*fitparams[0,1]
+    fp2=copy.deepcopy(fp)
+    fp2[fp < fitparams[0,0]*2-hwhm]=0
+    fp2/=fitparams[0,0]*2
+    centerpos=np.zeros(fp.shape[0],dtype=np.float32)
+    sigmapos=np.zeros(fp.shape[0],dtype=np.float32)
+    com=np.zeros(fp.shape[1],dtype=np.float32)
+    for i in tqdm(range(fp.shape[0])):
+        if np.std(fp2[i,:] != 0):
+            maxfit=np.where(fp2[i,:] == fp2[i,:].max())[0]
+            if len(maxfit) == 1:
+                centerpos[i] = maxfit + 1
+            else:
+                com*=0
+                for j in range(fp.shape[1]):
+                    com[j]+= (j+1)*fp2[i,j]
+                    centerpos[i] = np.sum(com) / np.sum(fp2[i,:])
+            sigmapos[i] = np.sum(fp2[i,:])*hwhm
+    return centerpos,sigmapos
 
 def lmfit_1DGauss(params,xrange,ydata):
     gauss=gaussian1D(xrange,params['cons'],params['ampl'],params['center'],params['sigma'])
@@ -454,13 +472,13 @@ def goodness_of_fit_F(modelfit,data,mask,dof,chisq=None):
     #returns array size datapoints with F-statistics
     fval=np.zeros(mask.shape)
     msm=np.zeros(mask.shape)
-    for i in tqdm(range(mask.shape)):
+    for i in tqdm(range(mask.shape[0])):
         if mask[i]!=0:
             msm[i]=np.sum((np.mean(data[i,:])-modelfit[i,:])**2)/dof[0]
-    if chisq==None:
-        chisq=np.sum((data-modelfit)**2,axis=1)
+    # if chisq==None:
+    #     chisq=np.sum((data-modelfit)**2,axis=1)
     mse=chisq/dof[1]
-    fval=msm/mse
+    fval[mse!=0]=msm[mse!=0]/mse[mse!=0]
     return(fval)
     
 def inverselog_hrf(timerange,hrfparams):

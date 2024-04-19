@@ -82,3 +82,17 @@ def satterthwaite_dof(data,group_column=None,data_column=None,group_column_idx=0
 def rebin(a, shape):
     sh = shape[0],a.shape[0]//shape[0],shape[1],a.shape[1]//shape[1]
     return a.reshape(sh).mean(-1).mean(1)
+
+def multiple_correlation(X,y):
+    # X = np array [nfactors,ntime]
+    # y = np array [ntime]
+    c=np.zeros(X.shape[0])
+    for i in range(X.shape[0]):
+        c[i]=np.corrcoef(X[i,:],y)[0][1]
+    R = np.corrcoef(X)
+    Rsq = c.T @ np.linalg.inv(R) @ c
+    return (Rsq)
+    
+    
+    
+    

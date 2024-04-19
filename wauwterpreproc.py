@@ -276,6 +276,65 @@ def MP2Rclass_seg(gm_file,wm_file,csf_file,out_file):
     hdrg['vox_offset']=352
     savenii(segt1,hdrg,out_file)
 
+def fsribbon_seg(ribbon_file,t1_file,out_file):
+    
+    gm,hdr=readnii(ribbon_file)
+    t1,hdrt1=readnii(t1_file)
+      
+    segt1=np.zeros(gm.shape,dtype=np.int16)
+    segt1[gm > 0]=3
+    
+    for i in range(gm.shape[0]):
+        for j in range(gm.shape[1]):
+            for k in range(gm.shape[2]):
+                if (segt1[i,j,k]==0):
+                    minx=i-1
+                    maxx=i+2
+                    miny=j-1
+                    maxy=j+2
+                    minz=k-1
+                    maxz=k+2
+                    if minx < 0: minx=0
+                    if miny < 0: miny=0
+                    if minz < 0: minz=0
+                    if maxx > gm.shape[0]: maxx=gm.shape[0]
+                    if maxy > gm.shape[1]: maxy=gm.shape[1]
+                    if maxz > gm.shape[2]: maxz=gm.shape[2]
+                    if (np.sum(segt1[minx:maxx,miny:maxy,minz:maxz]==3)>0):
+                        tmp1=copy.deepcopy(t1[minx:maxx,miny:maxy,minz:maxz])
+                        tmp2=copy.deepcopy(segt1[minx:maxx,miny:maxy,minz:maxz])
+                        tmp=np.mean(tmp1[tmp2==3])
+                        if t1[i,j,k] < tmp:
+                            segt1[i,j,k]=1
+                        elif t1[i,j,k] > tmp:
+                            segt1[i,j,k]=2
+                            
+    for i in range(gm.shape[0]):
+        for j in range(gm.shape[1]):
+            for k in range(gm.shape[2]):
+                if segt1[i,j,k] == 2:
+                    minx=i-1
+                    maxx=i+2
+                    miny=j-1
+                    maxy=j+2
+                    minz=k-1
+                    maxz=k+2
+                    if minx < 0: minx=0
+                    if miny < 0: miny=0
+                    if minz < 0: minz=0
+                    if maxx > gm.shape[0]: maxx=gm.shape[0]
+                    if maxy > gm.shape[1]: maxy=gm.shape[1]
+                    if maxz > gm.shape[2]: maxz=gm.shape[2]
+                    if np.sum(segt1[minx:maxx,miny:maxy,minz:maxz] == 1) > np.sum(segt1[minx:maxx,miny:maxy,minz:maxz] == 3):
+                        segt1[i,j,k]=1
+
+    hdr['datatype']=4
+    hdr['bitpix']=16
+    hdr['scl_slope']=1
+    hdr['scl_inter']=0
+    hdr['vox_offset']=352
+    savenii(segt1,hdr,out_file)
+
 def fsl_topup_params(json_file,phasedim="y"):
     with open(json_file) as f:
         data = json.load(f)
