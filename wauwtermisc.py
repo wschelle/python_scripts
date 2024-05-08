@@ -92,6 +92,12 @@ def multiple_correlation(X,y):
     R = np.corrcoef(X)
     Rsq = c.T @ np.linalg.inv(R) @ c
     return (Rsq)
+
+def pearson_cc(x,y):
+    numerator=np.sum((x-np.mean(x))*(y-np.mean(y)))
+    denominator=np.sqrt(np.sum((x-np.mean(x))**2) * np.sum((y-np.mean(y))**2))
+    r=numerator/denominator
+    return r
     
     
     
