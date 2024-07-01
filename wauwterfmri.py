@@ -55,18 +55,20 @@ def hrf_convolve(onsets,maxtime,TR=1,upsample_factor=10,glover_hrf=False,normali
     else:
         hrf=gammahrf(25,1/upsample_factor)
     fmat_conv=np.zeros([nr_factors,int(maxtime*upsample_factor+len(hrf)-1)])
-    fmat_conv_intp=np.zeros([nr_factors,int(maxtime/TR)])
+    fmat_conv_intp=np.zeros([nr_factors,int(np.round(maxtime/TR))])
+    if len(onsets[0,:]==3):
+        onsets=np.c_[ onsets, np.ones(nr_events) ]
     for i in range(nr_events):
-        fmat[int(onsets[i,0]),int(np.round(onsets[i,1]*upsample_factor)):int(np.round((onsets[i,1]+onsets[i,2])*upsample_factor))]=1
+            fmat[int(onsets[i,0]),int(np.round(onsets[i,1]*upsample_factor)):int(np.round((onsets[i,1]+onsets[i,2])*upsample_factor))]=onsets[i,3]
     realtime=np.arange(0,maxtime,1/upsample_factor)
     scantime=np.arange(0,maxtime,TR)
     for i in range(nr_factors):
         fmat_conv[i,:]=np.convolve(fmat[i,:], hrf)
-        if normalize_f:fmat_conv[i,:]/=np.max(fmat_conv[i,:])
+        if (normalize_f)&(np.max(fmat_conv[i,:])!=0):fmat_conv[i,:]/=np.max(fmat_conv[i,:])
         fcon = interp1d(realtime[0:int(maxtime*upsample_factor)],fmat_conv[i,0:int(maxtime*upsample_factor)],kind='cubic')
         fmat_conv_intp[i,:] = fcon(scantime)
     if not normalize_f: fmat_conv_intp/=np.max(fmat_conv_intp)
-    return(fmat_conv_intp)
+    return fmat_conv_intp
         
 def cosfilt(nf,time):
     fm=np.zeros([nf,time])
