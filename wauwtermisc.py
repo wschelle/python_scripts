@@ -98,7 +98,19 @@ def pearson_cc(x,y):
     denominator=np.sqrt(np.sum((x-np.mean(x))**2) * np.sum((y-np.mean(y))**2))
     r=numerator/denominator
     return r
+
+def linreg(x,y):
+    X = np.asarray([np.ones(len(x)), x]).T
+    beta_0, beta_1 = np.linalg.inv(X.T @ X) @ X.T @ y
+    return np.array([beta_0, beta_1])
     
-    
-    
+def pca(data,k=2):
+    #data = data.reshape((data.shape[0], -1))
+    mu = np.mean(data, axis=0)
+    std = np.std(data, axis=0).reshape(1,-1)
+    A = (data - mu) / std
+    U, S, Vt = np.linalg.svd(A, full_matrices=False)
+    V = np.transpose(Vt)
+    tmp = np.dot(A, V)
+    return tmp[:,:k],V,S  
     

@@ -752,3 +752,80 @@ def wm_onsets_V6(csvfile,precision=1,firstart=0,revert_precision=False):
         f1[:,1]/=precision
     
     return f1
+
+#dumbed down IO gating version
+def wm_onsets_V7(csvfile,precision=1,firstart=0,revert_precision=False):
+    df=pd.read_csv(csvfile)
+
+    sdur=1.
+    pdur=2.
+    mdur=0.5
+
+    scon=df['SampleCon'][1:-1]
+    pcon=df['ProbeCon'][1:-1]
+
+    starttime=df['StartFix.started'][1]
+    starts=df['InputFig1.started'][1:-1]
+    startp=df['OutputFig1.started'][1:-1]
+    startm=df['MatchFig1.started'][1:-1]
+
+    maxwm=df['MaxWM'][1:-1]
+    mcon=df['MatchCon'][1:-1]
+    mtrue=df['MatchTrue'][1:-1]
+    cats=['face','scene','tool']
+    catsp=['f_probe','s_probe','t_probe']
+    ncat=len(cats)
+
+    scon=scon.to_numpy()
+    scon = scon[~np.isnan(scon)]
+    pcon=pcon.to_numpy()
+    pcon = pcon[~np.isnan(pcon)]
+    maxwm=maxwm.to_numpy()
+    maxwm = maxwm[~np.isnan(maxwm)]
+    mcon=mcon.to_numpy()
+    mcon = mcon[~np.isnan(mcon)]   
+    mtrue=mtrue.to_numpy()
+    mtrue = mtrue[~np.isnan(mcon)]
+    mcon[(mcon==1)&(mtrue==0)]=2
+    maxwm[maxwm>3]=3
+
+    ncons=np.max(scon)+1
+    ntrial=len(scon)
+    nmatch1=np.sum(mcon==1)
+    nmatch2=np.sum(mcon==2)
+    nmatch=nmatch1+nmatch2
+
+    starts=starts.to_numpy()
+    startp=startp.to_numpy()
+    startm=startm.to_numpy()
+
+    starts-=starttime
+    startp-=starttime
+    startm-=starttime
+
+    starts*=precision
+    startp*=precision
+    startm*=precision
+
+    firstart*=precision
+
+    # 2 input & 2 output + 1 match conditions + parametric load
+    f1=np.zeros([ntrial*2+nmatch,3],dtype=np.float32)
+    f1[0:ntrial,0]=scon
+    f1[0:ntrial,1]=np.round(starts+firstart)
+    f1[0:ntrial,2]=sdur*ncat
+    
+    f1[ntrial:2*ntrial,0]=pcon+ncons
+    f1[ntrial:2*ntrial,1]=np.round(startp+firstart)
+    f1[ntrial:2*ntrial,2]=pdur*ncat
+    
+    f1[2*ntrial:2*ntrial+nmatch,0]=2*ncons
+    f1[2*ntrial:2*ntrial+nmatch,1]=np.round(startm[(mcon==1)|(mcon==2)]+firstart)
+    f1[2*ntrial:2*ntrial+nmatch,2]=mdur
+
+    f1=f1[f1[:,1].argsort()]
+        
+    if revert_precision:
+        f1[:,1]/=precision
+    
+    return f1

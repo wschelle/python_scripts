@@ -279,7 +279,7 @@ def getniicoor(nifti_file):
                 #coor[i,j,k,:] = np.multiply(R,im) + qoff
                 coor[i,j,k,:] = R @ im + qoff
     
-    return(coor)
+    return coor
 
 def copy_nifti_orientation(ref_nii, source_nii, output_nii):
     hdr0=readnii(ref_nii,header_only=True)

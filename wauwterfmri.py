@@ -62,6 +62,7 @@ def hrf_convolve(onsets,maxtime,TR=1,upsample_factor=10,glover_hrf=False,normali
             fmat[int(onsets[i,0]),int(np.round(onsets[i,1]*upsample_factor)):int(np.round((onsets[i,1]+onsets[i,2])*upsample_factor))]=onsets[i,3]
     realtime=np.arange(0,maxtime,1/upsample_factor)
     scantime=np.arange(0,maxtime,TR)
+    if scantime[-1]>=maxtime: scantime=scantime[:-1]
     for i in range(nr_factors):
         fmat_conv[i,:]=np.convolve(fmat[i,:], hrf)
         if (normalize_f)&(np.max(fmat_conv[i,:])!=0):fmat_conv[i,:]/=np.max(fmat_conv[i,:])
@@ -83,8 +84,12 @@ def dispmat(matr):
         axes[i].plot(matr[i,:])
     plt.show()
 
-def loadmp(mpfile):
-    mp=np.loadtxt(mpfile)
+def loadmp(mpfile,csv=None):
+    if csv:
+        mp=np.genfromtxt(mpfile,delimiter=',')
+    else:
+        mp=np.loadtxt(mpfile)
+        
     mp=mp.T
     return(mp)
 
@@ -430,15 +435,17 @@ def lmfit_nrprf(params, dm, ydata):
 
 def nrprf_center_sigma(fitparams,paramstart=4,paramstop=8):
     fp=fitparams[:,paramstart:paramstop]
-    hwhm=np.sqrt(2*np.log(2))*fitparams[0,1]
+    centercurve=np.max(fitparams[:,0])
+    sigmacurve=np.max(fitparams[:,1])
+    hwhm=np.sqrt(2*np.log(2))*sigmacurve
     fp2=copy.deepcopy(fp)
-    fp2[fp < fitparams[0,0]*2-hwhm]=0
-    fp2/=fitparams[0,0]*2
+    fp2[fp < centercurve*2-hwhm]=0
+    fp2/=centercurve*2
     centerpos=np.zeros(fp.shape[0],dtype=np.float32)
     sigmapos=np.zeros(fp.shape[0],dtype=np.float32)
     com=np.zeros(fp.shape[1],dtype=np.float32)
     for i in tqdm(range(fp.shape[0])):
-        if np.std(fp2[i,:] != 0):
+        if np.std(fp2[i,:]) != 0:
             maxfit=np.where(fp2[i,:] == fp2[i,:].max())[0]
             if len(maxfit) == 1:
                 centerpos[i] = maxfit + 1

@@ -9,11 +9,13 @@ Created on Thu Jan 26 00:23:03 2023
 import numpy as np
 from Python.python_scripts.wauwternifti import readnii, savenii
 from Python.python_scripts.wauwtermisc import butterworth_filter_3D, gaussian_filter_3D, convol_nan_3D
+from Python.python_scripts.FrangiFilter2D import Hessian2D, eig2image, FrangiFilter2D
 import os
-from scipy import ndimage
+from scipy import ndimage, signal
 import json
 import copy
 from tqdm import tqdm
+import math
 
 def mp2rage_norm(mp2r_dir,mp2r_file):
     nii,hdr=readnii(mp2r_dir+mp2r_file)
@@ -87,39 +89,39 @@ def fillgaps(nii_dir, nii_file, gap=0, fillthres=None, boxsize=3, minv=1, maxv=N
         fillthres=boxtotal//2
     maxgaps=boxtotal-fillthres
     
+    nii3=copy.deepcopy(nii).astype(np.float32)
+    
     if helperfile:
         nii2,hdr2=readnii(helperfile,scaling=False)
+        for i in tqdm(range(boxmin,nii.shape[0]-boxmax)):
+            for j in range(boxmin,nii.shape[1]-boxmax):
+                for k in range(boxmin,nii.shape[2]-boxmax):
+                    if (nii[i,j,k]==gap) & (nii2[i,j,k]!=0) & (np.sum(nii[i-boxmin:i+boxmax+1,j-boxmin:j+boxmax+1,k-boxmin:k+boxmax+1]!=gap)>0):
+                        hg,loc=np.histogram(nii[i-boxmin:i+boxmax+1,j-boxmin:j+boxmax+1,k-boxmin:k+boxmax+1],bins=100)
+                        hg=hg[loc[:-1]!=gap]
+                        loc=loc[loc!=gap]
+                        if hg.max() > 0:
+                            maxloc=loc[np.where(hg == hg.max())[0][0]+1]
+                        else:
+                            maxloc=np.max(nii[i-boxmin:i+boxmax+1,j-boxmin:j+boxmax+1,k-boxmin:k+boxmax+1])
+                        nii3[i,j,k]=maxloc
+    else:
         for i in range(boxmin,nii.shape[0]-boxmax):
             for j in range(boxmin,nii.shape[1]-boxmax):
                 for k in range(boxmin,nii.shape[2]-boxmax):
-                    if (nii[i,j,k]==gap) & (nii2[i,j,k]!=0) & (np.max(nii[i-boxmin:i+boxmax+1,j-boxmin:j+boxmax+1,k-boxmin:k+boxmax+1])>0):
+                    if (nii[i,j,k]==gap) & (np.sum(nii[i-boxmin:i+boxmax+1,j-boxmin:j+boxmax+1,k-boxmin:k+boxmax+1]==gap) <= maxgaps):
                         hg,loc=np.histogram(nii[i-boxmin:i+boxmax+1,j-boxmin:j+boxmax+1,k-boxmin:k+boxmax+1],bins=int(np.max(nii[i-boxmin:i+boxmax+1,j-boxmin:j+boxmax+1,k-boxmin:k+boxmax+1])))
-                        loc=loc[:-1]
-                        hg=hg[loc!=gap]
-                        loc=loc[loc!=gap]
-                        if len(loc) > 0:
-                            maxloc=loc[np.where(hg == np.max(hg))][0]+1
-                        else:
-                            maxloc=np.max(nii[i-boxmin:i+boxmax+1,j-boxmin:j+boxmax+1,k-boxmin:k+boxmax+1])
-                        nii[i,j,k]=maxloc
-          
-    for i in range(boxmin,nii.shape[0]-boxmax):
-        for j in range(boxmin,nii.shape[1]-boxmax):
-            for k in range(boxmin,nii.shape[2]-boxmax):
-                if (nii[i,j,k]==gap) & (np.sum(nii[i-boxmin:i+boxmax+1,j-boxmin:j+boxmax+1,k-boxmin:k+boxmax+1]==gap) <= maxgaps):
-                    hg,loc=np.histogram(nii[i-boxmin:i+boxmax+1,j-boxmin:j+boxmax+1,k-boxmin:k+boxmax+1],bins=int(np.max(nii[i-boxmin:i+boxmax+1,j-boxmin:j+boxmax+1,k-boxmin:k+boxmax+1])))
-                    maxloc=loc[np.where(hg == np.max(hg))]+1
-                    maxloc=maxloc[0]
-                    if (maxloc >= minv) & (maxloc <= maxv) & (np.max(hg) >= fillthres):
-                        nii[i,j,k]=maxloc
+                        maxloc=loc[np.where(hg == np.max(hg))]+1
+                        maxloc=maxloc[0]
+                        if (maxloc >= minv) & (maxloc <= maxv) & (np.max(hg) >= fillthres):
+                            nii3[i,j,k]=maxloc
                         
-    nii=nii.astype(np.int16)
-    hdr['datatype']=4
-    hdr['bitpix']=16
+    hdr['datatype']=16
+    hdr['bitpix']=32
     hdr['scl_slope']=1
     hdr['scl_inter']=0
     hdr['vox_offset']=352
-    savenii(nii,hdr,nii_dir+'fill_'+nii_file)
+    savenii(nii3,hdr,nii_dir+'fill_'+nii_file)
 
 
 def atropos_seg(an4_dir,gmin=4,gmax=6,reversed_contrast=False,weirdMP2R_contrast=False,gmid=5):
@@ -304,7 +306,7 @@ def fsribbon_seg(ribbon_file,t1_file,out_file):
                         tmp1=copy.deepcopy(t1[minx:maxx,miny:maxy,minz:maxz])
                         tmp2=copy.deepcopy(segt1[minx:maxx,miny:maxy,minz:maxz])
                         tmp=np.mean(tmp1[tmp2==3])
-                        if t1[i,j,k] < tmp:
+                        if t1[i,j,k] <= tmp:
                             segt1[i,j,k]=1
                         elif t1[i,j,k] > tmp:
                             segt1[i,j,k]=2
@@ -325,7 +327,9 @@ def fsribbon_seg(ribbon_file,t1_file,out_file):
                     if maxx > gm.shape[0]: maxx=gm.shape[0]
                     if maxy > gm.shape[1]: maxy=gm.shape[1]
                     if maxz > gm.shape[2]: maxz=gm.shape[2]
-                    if np.sum(segt1[minx:maxx,miny:maxy,minz:maxz] == 1) > np.sum(segt1[minx:maxx,miny:maxy,minz:maxz] == 3):
+                    #if np.sum(segt1[minx:maxx,miny:maxy,minz:maxz] == 1) > np.sum(segt1[minx:maxx,miny:maxy,minz:maxz] == 3):
+                    #if np.sum(segt1[minx:maxx,miny:maxy,minz:maxz] == 1) > 3:
+                    if np.sum(segt1[minx:maxx,miny:maxy,minz:maxz] == 1) > 5:
                         segt1[i,j,k]=1
 
     hdr['datatype']=4
@@ -495,15 +499,25 @@ def laysmo(niifile,layfile,fwhm=1,kernelsize=7,nlay=6,layedge=0,parcfile='',lowc
     hdr['scl_slope']=1
     hdr['scl_inter']=0
     hdr['vox_offset']=352
-    niistring=niifile.split('.')
-    if niistring[-1]=='gz':
-        newnii=niistring[0]+'_'+suffix+'.'+niistring[1]+'.'+niistring[2]
-    else:
-        newnii=niistring[0]+'_'+suffix+'.'+niistring[1]       
+    niistring=niifile.split('.nii')
+    newnii=niistring[0]+'_'+suffix+'.nii'+niistring[1]
     savenii(niic.astype(np.float32),hdr,newnii)
 
 
-
+def frangi_vessel(niifile,outfile):
+    nii,hdr=readnii(niifile)
+    
+    ves=np.zeros(nii.shape,dtype=np.float32)
+    for i in range(nii.shape[2]):
+        if np.std(nii[:,:,i]>0):
+            ves[:,:,i]=FrangiFilter2D(np.squeeze(nii[:,:,i]))
+    
+    hdr['bitpix']=32
+    hdr['datatype']=16
+    hdr['vox_offset']=352
+    hdr['scl_slope']=1
+    savenii(ves,hdr,outfile)
+    
 
 
   

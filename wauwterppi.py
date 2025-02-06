@@ -99,3 +99,36 @@ def gppi_c(designmatrix,seedtimeseries,contrastmatrix,TR=1,cc_threshold=1,dm_thr
         ppi_mat[i,:]=ppic[0:designmatrix.shape[1]]
         
     return ppi_mat
+
+def gppi_hrfup(designmatrix,seedtimeseries,hrf,cc_threshold=0.8,dm_threshold=0.15,tshift=-10):
+    
+    hrf/=hrf.max()
+    hrf0=np.zeros(len(seedtimeseries),dtype=np.float32)
+    hrf0[:len(hrf)]=hrf
+    sts=copy.deepcopy(seedtimeseries)
+    sts[np.abs(sts)<(np.std(sts)*cc_threshold)]=0
+    
+    decon=correlate(hrf0,sts)
+    decon=decon[0:len(seedtimeseries)]
+    decon/=np.max(decon)
+    decon=np.flip(decon)
+    decon[np.abs(decon)<=dm_threshold]=0
+    decon=np.roll(decon,tshift)
+        
+    ppi=np.zeros(len(designmatrix),dtype=np.float32)
+    for i in range(len(designmatrix)):
+        if designmatrix[i]==0:
+            if decon[i]==0:
+                ppi[i]=0
+            else:
+                ppi[i]=decon[i]*-0.5
+        else:
+            if decon[i]==0:
+                ppi[i]=0
+            else:
+                ppi[i]=decon[i]*0.5
+    ppi/=np.max(np.abs(ppi))
+    ppic=np.convolve(ppi,hrf)
+    ppic/=np.max(ppic)
+        
+    return ppic[0:len(seedtimeseries)]
