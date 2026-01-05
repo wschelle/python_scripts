@@ -176,7 +176,7 @@ def GLM(X, Y, mask, norm_X=True, add_const=True, beta_only=False, betaresid_only
             yhat[i,:] = X @ beta[i,:]
         
     residuals=Y-yhat
-    msres=np.sum(residuals**2,axis=1)/(X.shape[0]-X.shape[1]-1)
+    msres=np.sum(residuals**2,axis=1)/(X.shape[0]-X.shape[1])
     
     if beta_only:
         return beta
@@ -216,7 +216,7 @@ def GLS(X, Y, mask, yhat_0, norm_X=True, add_const=True, beta_only=False, betare
             yhat[i,:] = X @ beta[i,:]
     
     residuals = Y - yhat
-    msres=np.sum(residuals**2,axis=1)/(X.shape[0]-X.shape[1]-1)
+    msres=np.sum(residuals**2,axis=1)/(X.shape[0]-X.shape[1])
     
     if beta_only:
         return beta
@@ -468,7 +468,7 @@ def multiple_comparison(statistic,dfn=None,dfd=None,alpha=0.05,method='fdr_bh',t
     if test=='f':
         uncorr_pval = 1-stats.f.cdf(stat0, dfn, dfd)
     corr_pval=multipletests(uncorr_pval,alpha,method=method)[1]
-    if cutoff_only:
+    if ((cutoff_only) & (np.min(corr_pval[stat0>0])<alpha)):
         return np.min(stat0[(corr_pval<alpha) & (stat0>0)])
     else:
         return uncorr_pval,corr_pval

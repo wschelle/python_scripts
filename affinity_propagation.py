@@ -87,7 +87,7 @@ def aff_prop_s(M,preference,prefmultiply,bit16):
     print('Done.')
     return(S)
 
-def aff_prop(M,preference=None,prefmultiply=1,lambda_damp=0.5,maxiter=10,maxtries=10000,verbose=False,bit16=0):
+def aff_prop(M,preference=None,prefmultiply=1,lambda_damp=0.5,maxiter=10,maxtries=300,verbose=False,bit16=0,simple_numbering=True):
     # 'Affinitity Propagation clustering for IDL, and for Python :)'
     # 'Supply matrix: [points,observations]'
     # 'Example: M=[100,3] for 100 points with 3 values each (e.g. x,y,z)'
@@ -101,11 +101,16 @@ def aff_prop(M,preference=None,prefmultiply=1,lambda_damp=0.5,maxiter=10,maxtrie
     # 'Keyword: maxtries (default=10000). Max nr of tries. Useful if stuck in loop'
     # 'Keyword: verb. Print label iteration and nr tries'
     # 'Keyword: bit16 (default=0). 16-bit instead of 32-bit precision'
+    # 'Keyword: simple_numbering (default=True). Renames clusters from 1 to max cluster nr.'
     
     if bit16==1:
         M=M.astype(np.float16)
         
     S=aff_prop_s(M,preference,prefmultiply,bit16)
+    
+    if verbose:
+        print('Median preference = '+str(S[0,0]/prefmultiply))
+        print('Adjusted preference = '+str(S[0,0]))
     
     SM=M.shape
     R=copy.deepcopy(S)*0
@@ -133,4 +138,14 @@ def aff_prop(M,preference=None,prefmultiply=1,lambda_damp=0.5,maxiter=10,maxtrie
         if verbose:
             print('ITER: ',now)
             print('TRY: ',ntries)
-    return(labels)
+    
+    if simple_numbering:
+        final_labels=np.zeros(labels.size,dtype=np.int64)
+        ul=np.unique(labels)
+        for idx,key in enumerate(ul):
+            final_labels[labels==key]=idx+1
+    else:
+        final_labels=labels
+    
+    unique_labels=np.unique(final_labels)
+    return final_labels, unique_labels

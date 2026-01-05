@@ -16,7 +16,7 @@ def bids_subtsv_dcm(dicomfolder,bidsfolder,subid):
     
     tsv=pd.read_csv(bidsfolder+'participants.tsv',sep='\t')
     dcmfiles = [f for f in listdir(dicomfolder) if isfile(join(dicomfolder, f))]
-    dcm = pydicom.read_file(dicomfolder+'/'+dcmfiles[0])
+    dcm = pydicom.dcmread(dicomfolder+'/'+dcmfiles[0])
     newrow = [subid,dcm['PatientAge'][1:3],dcm['PatientSex'][0],dcm['PatientSize']._value,dcm['PatientWeight']._value,'n/a']
     cursub=len(tsv)
     tsv.loc[cursub] = newrow

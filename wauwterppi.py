@@ -11,7 +11,7 @@ from scipy.signal import correlate
 from scipy.ndimage import gaussian_filter1d
 #from Python.pybold_master.pybold.hrf_model import spm_hrf
 #from Python.pybold_master.pybold.bold_signal import deconv
-from Python.python_scripts.wauwterfmri import gammahrf
+from Python.python_scripts.wauwterfmri import gloverhrf,gammahrf
 
 # def bold_deconvolve(timeseries,hrf=None,TR=1,nb_iter=100):
 #     if hrf is None:
@@ -100,7 +100,7 @@ def gppi_c(designmatrix,seedtimeseries,contrastmatrix,TR=1,cc_threshold=1,dm_thr
         
     return ppi_mat
 
-def gppi_hrfup(designmatrix,seedtimeseries,hrf,cc_threshold=0.8,dm_threshold=0.15,tshift=-10):
+def gppi_hrfup(designmatrix,seedtimeseries,hrf,cc_threshold=0.8,dm_threshold=0.1,tshift=-10,posmagnitude=0.5,negmagnitude=-0.5):
     
     hrf/=hrf.max()
     hrf0=np.zeros(len(seedtimeseries),dtype=np.float32)
@@ -121,14 +121,55 @@ def gppi_hrfup(designmatrix,seedtimeseries,hrf,cc_threshold=0.8,dm_threshold=0.1
             if decon[i]==0:
                 ppi[i]=0
             else:
-                ppi[i]=decon[i]*-0.5
+                ppi[i]=decon[i]*negmagnitude
         else:
             if decon[i]==0:
                 ppi[i]=0
             else:
-                ppi[i]=decon[i]*0.5
+                ppi[i]=decon[i]*posmagnitude
     ppi/=np.max(np.abs(ppi))
     ppic=np.convolve(ppi,hrf)
     ppic/=np.max(ppic)
         
     return ppic[0:len(seedtimeseries)]
+
+def sppi_hrfup(designmatrix1,designmatrix2,seedtimeseries,hrf,cc_threshold=0.8,dm_threshold=0.0,tshift=-10):
+    
+    hrf/=hrf.max()
+    hrf0=np.zeros(len(seedtimeseries),dtype=np.float32)
+    hrf0[:len(hrf)]=hrf
+    sts=copy.deepcopy(seedtimeseries)
+    sts[np.abs(sts)<(np.std(sts)*cc_threshold)]=0
+    
+    decon=correlate(hrf0,sts)
+    decon=decon[0:len(seedtimeseries)]
+    decon/=np.max(decon)
+    decon=np.flip(decon)
+    decon[np.abs(decon)<=dm_threshold]=0
+    decon=np.roll(decon,tshift)
+        
+    ppi=np.zeros(len(designmatrix1),dtype=np.float32)
+    for i in range(len(designmatrix1)):
+        if (designmatrix1[i]==0) & (designmatrix2[i]==0):
+            ppi[i]=0
+        elif (designmatrix1[i]==1) & (designmatrix2[i]==0):
+            ppi[i]=decon[i]
+        elif (designmatrix1[i]==0) & (designmatrix2[i]==1):
+            ppi[i]=(-decon[i])
+        else:
+            ppi[i]=0
+            
+    ppi/=np.max(np.abs(ppi))
+    ppic=np.convolve(ppi,hrf)
+    ppic/=np.max(ppic)
+        
+    return ppic[0:len(seedtimeseries)]
+
+def gppi_simple(designtimeseries,seedtimeseries,posit=1,negat=-1):
+        
+    ppi=np.zeros(len(seedtimeseries),dtype=seedtimeseries.dtype)
+    ppi[designtimeseries>0]=seedtimeseries[designtimeseries>0]*posit
+    ppi[designtimeseries<0]=seedtimeseries[designtimeseries<0]*negat
+    ppi/=np.max(np.abs(ppi))
+    
+    return ppi

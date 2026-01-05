@@ -113,7 +113,7 @@ def wm_onsets(csvfile,precision=1,firstart=-1):
     return(f1,f2,f3,f4)
 
 
-def wm_onsets_V2(csvfile,precision=1,firstart=-1,revert_precision=False):
+def wm_onsets_V2(csvfile,precision=1,firstart=0,revert_precision=False):
     df=pd.read_csv(csvfile)
 
     sdur=1.
@@ -829,3 +829,258 @@ def wm_onsets_V7(csvfile,precision=1,firstart=0,revert_precision=False):
         f1[:,1]/=precision
     
     return f1
+
+def wm_onsets_V8(csvfile,precision=1,firstart=0,revert_precision=False):
+    df=pd.read_csv(csvfile)
+
+    sdur=3
+    pdur=6
+    mdur=2
+
+    scon=df['SampleCon'][1:-1]
+    pcon=df['ProbeCon'][1:-1]
+
+    starttime=df['StartFix.started'][1]
+    starts1=df['InputFig1.started'][1:-1]
+    starts2=df['InputFig2.started'][1:-1]
+    starts3=df['InputFig3.started'][1:-1]
+    startp1=df['OutputFig1.started'][1:-1]
+    startp2=df['OutputFig2.started'][1:-1]
+    startp3=df['OutputFig3.started'][1:-1]
+    startm=df['MatchFig1.started'][1:-1]
+
+    maxwm=df['MaxWM'][1:-1]
+    mcon=df['MatchCon'][1:-1]
+    mtrue=df['MatchTrue'][1:-1]
+    cats=['face','scene','tool']
+    catsp=['f_probe','s_probe','t_probe']
+    ncat=len(cats)
+
+    scon=scon.to_numpy()
+    scon = scon[~np.isnan(scon)]
+    pcon=pcon.to_numpy()
+    pcon = pcon[~np.isnan(pcon)]
+    maxwm=maxwm.to_numpy()
+    maxwm = maxwm[~np.isnan(maxwm)]
+    mcon=mcon.to_numpy()
+    mcon = mcon[~np.isnan(mcon)]   
+    mtrue=mtrue.to_numpy()
+    mtrue = mtrue[~np.isnan(mcon)]
+    mcon[(mcon==1)&(mtrue==0)]=2
+    maxwm[maxwm>3]=3
+
+    ncons=np.max(scon)+1
+    ntrial=len(scon)
+    nmatch1=np.sum(mcon==1)
+    nmatch2=np.sum(mcon==2)
+    nmatch=nmatch1+nmatch2
+
+    starts1=starts1.to_numpy()
+    starts2=starts2.to_numpy()
+    starts3=starts3.to_numpy()
+    startp1=startp1.to_numpy()
+    startp2=startp2.to_numpy()
+    startp3=startp3.to_numpy()
+    startm=startm.to_numpy()
+
+    starts1-=starttime
+    starts2-=starttime
+    starts3-=starttime
+    startp1-=starttime
+    startp2-=starttime
+    startp3-=starttime
+    startm-=starttime
+
+    starts1*=precision
+    starts2*=precision
+    starts3*=precision
+    startp1*=precision
+    startp2*=precision
+    startp3*=precision
+    startm*=precision
+
+    firstart*=precision
+    
+    scon2=copy.deepcopy(scon)
+    scon2[(scon>0)]=1
+    scon3=copy.deepcopy(scon)
+    scon3[(scon==0)|(scon==3)]=1
+    scon3[scon==1]=0.5
+    scon3[scon==2]=0.75
+    
+    pcon2=copy.deepcopy(pcon)
+    pcon2[(pcon==0)]=2
+    pcon2[(pcon>0)]=3
+    pcon3=copy.deepcopy(pcon)
+    pcon3[(pcon==0)|(pcon==3)]=1
+    pcon3[pcon==1]=0.5
+    pcon3[pcon==2]=0.75
+
+    # 2 input & 2 output + 2 match conditions (base setup)
+    f1=np.zeros([ntrial*2+nmatch,4],dtype=np.float32) #4th column is parametric modulation
+    f1[0:ntrial,0]=scon2
+    f1[0:ntrial,1]=np.round(starts1+firstart)
+    f1[0:ntrial,2]=sdur
+    f1[0:ntrial,3]=scon3
+    f1[ntrial:2*ntrial,0]=pcon2
+    f1[ntrial:2*ntrial,1]=np.round(startp1+firstart)
+    f1[ntrial:2*ntrial,2]=pdur
+    f1[ntrial:2*ntrial,3]=pcon3
+    f1[2*ntrial:2*ntrial+nmatch,0]=4
+    f1[2*ntrial:2*ntrial+nmatch,1]=np.round(startm[mcon>0]+firstart)
+    f1[2*ntrial:2*ntrial+nmatch,2]=mdur
+    f1[2*ntrial:2*ntrial+nmatch,3]=1
+    f1=f1[f1[:,1].argsort()]
+    
+    if revert_precision:
+        f1[:,1]/=precision
+    
+    return f1
+
+def wm_onsets_V9(csvfile,precision=1,firstart=0,revert_precision=False):
+    #prepping onset files to GLM per individual presentation
+    df=pd.read_csv(csvfile)
+
+    sdur=1.
+    pdur=2.
+    mdur=1.
+
+    scon=df['SampleCon'][1:-1]
+    pcon=df['ProbeCon'][1:-1]
+
+    starttime=df['StartFix.started'][1]
+    starts1=df['InputFig1.started'][1:-1]
+    starts2=df['InputFig2.started'][1:-1]
+    starts3=df['InputFig3.started'][1:-1]
+    startp1=df['OutputFig1.started'][1:-1]
+    startp2=df['OutputFig2.started'][1:-1]
+    startp3=df['OutputFig3.started'][1:-1]
+    startm=df['MatchFig1.started'][1:-1]
+
+    maxwm=df['MaxWM'][1:-1]
+    mcon=df['MatchCon'][1:-1]
+    mtrue=df['MatchTrue'][1:-1]
+    cats=['face','scene','tool']
+    # catsp=['f_probe','s_probe','t_probe']
+    # ncat=len(cats)
+
+    scon=scon.to_numpy()
+    scon = scon[~np.isnan(scon)]
+    pcon=pcon.to_numpy()
+    pcon = pcon[~np.isnan(pcon)]
+    maxwm=maxwm.to_numpy()
+    maxwm = maxwm[~np.isnan(maxwm)]
+    mcon=mcon.to_numpy()
+    mcon = mcon[~np.isnan(mcon)]   
+    mtrue=mtrue.to_numpy()
+    mtrue = mtrue[~np.isnan(mcon)]
+    mcon[(mcon==1)&(mtrue==0)]=2
+    maxwm[maxwm>3]=3
+
+    # ncons=np.max(scon)+1
+    ntrial=len(scon)
+    # nmatch1=np.sum(mcon==1)
+    # nmatch2=np.sum(mcon==2)
+    # nmatch=nmatch1+nmatch2
+    
+    cats=['face','scene','tool']
+    # catsp=['f_probe','s_probe','t_probe','x']
+    # ncat=len(cats)
+
+    starts1=starts1.to_numpy()
+    starts2=starts2.to_numpy()
+    starts3=starts3.to_numpy()
+    startp1=startp1.to_numpy()
+    startp2=startp2.to_numpy()
+    startp3=startp3.to_numpy()
+    startm=startm.to_numpy()
+
+    starts1-=starttime
+    starts2-=starttime
+    starts3-=starttime
+    startp1-=starttime
+    startp2-=starttime
+    startp3-=starttime
+    startm-=starttime
+
+    starts1*=precision
+    starts2*=precision
+    starts3*=precision
+    startp1*=precision
+    startp2*=precision
+    startp3*=precision
+    startm*=precision
+
+    firstart*=precision
+    
+    nphase=3
+    npos=3
+    ntype=3
+    
+    onsetmat=np.zeros((ntrial,nphase,npos,ntype),dtype=np.float32)
+    
+    for i in range(ntrial):
+        if df['SampleBox1'][i+1]==1:
+            onsetmat[i,0,0,0]=next((j for j, s in enumerate(cats) if s in df['Sample1'][i+1]), None)+1 #get input conditions 1=Face,2=Scene,3=Tool
+        else:
+            onsetmat[i,0,0,0]=next((j for j, s in enumerate(cats) if s in df['Sample1'][i+1]), None)+4 #get ignore conditions 4=Face,5=Scene,6=Tool
+        if df['SampleBox2'][i+1]==1:
+            onsetmat[i,0,1,0]=next((j for j, s in enumerate(cats) if s in df['Sample2'][i+1]), None)+1 #get input conditions 1=Face,2=Scene,3=Tool
+        else:
+            onsetmat[i,0,1,0]=next((j for j, s in enumerate(cats) if s in df['Sample2'][i+1]), None)+4 #get ignore conditions 4=Face,5=Scene,6=Tool
+        if df['SampleBox3'][i+1]==1:
+            onsetmat[i,0,2,0]=next((j for j, s in enumerate(cats) if s in df['Sample3'][i+1]), None)+1 #get input conditions 1=Face,2=Scene,3=Tool
+        else:
+            onsetmat[i,0,2,0]=next((j for j, s in enumerate(cats) if s in df['Sample3'][i+1]), None)+4 #get ignore conditions 4=Face,5=Scene,6=Tool
+        onsetmat[i,0,0,1]=starts1[i] #get timing for input/ignore conditions
+        onsetmat[i,0,1,1]=starts2[i] #get timing for input/ignore conditions
+        onsetmat[i,0,2,1]=starts3[i] #get timing for input/ignore conditions
+        onsetmat[i,0,0,2]=sdur #get duration for input/ignore
+        onsetmat[i,0,1,2]=sdur
+        onsetmat[i,0,2,2]=sdur
+        if 'x' not in df['Probe1'][i+1]:
+            onsetmat[i,1,0,0]=next((j for j, s in enumerate(cats) if s in df['Probe1'][i+1]), None)+1 #get output conditions 1=Face,2=Scene,3=Tool
+        else:
+            onsetmat[i,1,0,0]=4 #output ignore (X) condition
+        if 'x' not in df['Probe2'][i+1]:
+            onsetmat[i,1,1,0]=next((j for j, s in enumerate(cats) if s in df['Probe2'][i+1]), None)+1 #get output conditions 1=Face,2=Scene,3=Tool
+        else:
+            onsetmat[i,1,1,0]=4 #output ignore (X) condition
+        if 'x' not in df['Probe3'][i+1]:
+            onsetmat[i,1,2,0]=next((j for j, s in enumerate(cats) if s in df['Probe3'][i+1]), None)+1 #get output conditions 1=Face,2=Scene,3=Tool
+        else:
+            onsetmat[i,1,2,0]=4 #output ignore (X) condition
+        onsetmat[i,1,0,1]=startp1[i] #get timing output
+        onsetmat[i,1,1,1]=startp2[i]
+        onsetmat[i,1,2,1]=startp3[i]
+        onsetmat[i,1,0,2]=pdur #get duration for output
+        onsetmat[i,1,1,2]=pdur
+        onsetmat[i,1,2,2]=pdur
+        if mcon[i]>0:
+            onsetmat[i,2,0,0]=next((j for j, s in enumerate(cats) if s in df['Match1'][i+1]), None)+1 #get match conditions 1=Face,2=Scene,3=Tool
+            onsetmat[i,2,0,1]=startm[i]
+            onsetmat[i,2,0,2]=mdur
+        
+        f1=np.zeros([])
+        for i in range(ntrial):
+            for j in range(nphase):
+                for k in range(npos):
+                    if onsetmat[i,j,k,1]!=0:
+                        f1=np.append(f1,(int(i*nphase*npos+j*npos+k),onsetmat[i,j,k,1],onsetmat[i,j,k,2]))
+    
+    f1=np.reshape(f1[1:],[int((f1.shape[0]-1)/3),3])
+        # f1=f1[f1[:,1].argsort()]
+        
+    f2=np.zeros((f1.shape[0],3))
+    for i in range(ntrial):
+        for j in range(nphase):
+            for k in range(npos):
+                if onsetmat[i,j,k,1]!=0:
+                    f2[f1[:,0]==int(i*nphase*npos+j*npos+k),:]=(j,k,onsetmat[i,j,k,0])
+                        
+    f1[:,0]=np.arange(f1.shape[0])
+    if revert_precision:
+        f1[:,1]/=precision
+        
+    return f1,f2
+

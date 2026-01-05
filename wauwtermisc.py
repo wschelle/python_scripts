@@ -6,16 +6,20 @@ Created on Thu Jan 26 11:44:41 2023
 @author: wousch
 """
 import numpy as np
+from scipy import stats
 
-def unique(list1):
-    # initialize a null list
-    unique_list = []
-    # traverse for all elements
-    for x in list1:
-        # check if exists in unique_list or not
-        if x not in unique_list:
-            unique_list.append(x)
-    return(unique_list)
+def unique(array):
+    # Initialize an empty numpy array
+    unique_items = np.empty(shape=(0,), dtype=array.dtype)
+
+    # Traverse for all elements
+    for x in array:
+        # Check if exists in unique_items or not
+        if x not in unique_items:
+            # Use numpy.append to append the element
+            unique_items = np.append(unique_items, x)
+
+    return unique_items
 
 def butterworth_filter_3D(xdim, ydim, zdim, cutoff, order):
     distarr=np.zeros([xdim,ydim,zdim])
@@ -104,13 +108,20 @@ def linreg(x,y):
     beta_0, beta_1 = np.linalg.inv(X.T @ X) @ X.T @ y
     return np.array([beta_0, beta_1])
     
-def pca(data,k=2):
-    #data = data.reshape((data.shape[0], -1))
-    mu = np.mean(data, axis=0)
-    std = np.std(data, axis=0).reshape(1,-1)
-    A = (data - mu) / std
-    U, S, Vt = np.linalg.svd(A, full_matrices=False)
-    V = np.transpose(Vt)
-    tmp = np.dot(A, V)
-    return tmp[:,:k],V,S  
+def quick_pca(data,k=2):
+    data -= data.mean(axis=0) # data needs to be in shape [n_observations,n_features]
+    U, S, Vt = np.linalg.svd(data, full_matrices=False)
+    pc = U[:, :k] * S[:k]
+    return pc
+
+def convert_t_to_z(t_data, dof):
+    # Convert t-values to p-values, then to Z-scores
+    z_scores = stats.norm.ppf(stats.t.cdf(t_data, dof))
+    z_scores[np.isnan(z_scores)] = 0
+    z_scores[np.isinf(z_scores)] = 0
+    return z_scores
+
+def cosine_dist(x,y):
+    cos_sim = np.dot(x, y) / (np.linalg.norm(x) * np.linalg.norm(y))
+    return 1-cos_sim
     

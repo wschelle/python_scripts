@@ -260,7 +260,10 @@ def getniicoor(nifti_file):
     qb=hdr['quatern_b']
     qc=hdr['quatern_c']
     qd=hdr['quatern_d']
-    qa=np.sqrt(1 - (qb**2 + qc**2 + qd**2))
+    sum_q_squares = qb**2 + qc**2 + qd**2
+    if sum_q_squares > 1:
+        sum_q_squares = 0
+    qa=np.sqrt(1 - sum_q_squares)
     qox=hdr['qoffset_x']
     qoy=hdr['qoffset_y']
     qoz=hdr['qoffset_z']
@@ -280,6 +283,54 @@ def getniicoor(nifti_file):
                 coor[i,j,k,:] = R @ im + qoff
     
     return coor
+
+def niicoorgrid(nifti_file):
+    hdr=readnii(nifti_file,header_only=True)
+    fx=hdr['dim'][1]
+    fy=hdr['dim'][2]
+    fz=hdr['dim'][3]
+    q=hdr['pixdim'][0]
+    sx=hdr['pixdim'][1]
+    sy=hdr['pixdim'][2]
+    sz=hdr['pixdim'][3]
+    qb=hdr['quatern_b']
+    qc=hdr['quatern_c']
+    qd=hdr['quatern_d']
+    sum_q_squares = qb**2 + qc**2 + qd**2
+    if sum_q_squares > 1:
+        sum_q_squares = 0
+    qa=np.sqrt(1 - sum_q_squares)
+    qox=hdr['qoffset_x']
+    qoy=hdr['qoffset_y']
+    qoz=hdr['qoffset_z']
+    qoff=np.array([qox,qoy,qoz])
+    R=np.array([[qa*qa+qb*qb-qc*qc-qd*qd, 2*qb*qc-2*qa*qd, 2*qb*qd+2*qa*qc],
+                [2*qb*qc+2*qa*qd, qa*qa+qc*qc-qb*qb-qd*qd, 2*qc*qd-2*qa*qb],
+                [2*qb*qd-2*qa*qc, 2*qc*qd+2*qa*qb, qa*qa+qd*qd-qc*qc-qb*qb]])
+    i_coords = np.arange(fx)
+    j_coords = np.arange(fy)
+    k_coords = np.arange(fz)
+    
+    # Create 3D grids of (i,j,k) for voxel centers
+    I, J, K = np.meshgrid(i_coords, j_coords, k_coords, indexing='ij')
+    
+    # Calculate the 'im' vectors for all voxels simultaneously
+    # Reshape to (N, 3) where N is total number of voxels
+    im_vectors = np.stack([
+        (I + 0.5) * sx,
+        (J + 0.5) * sy,
+        (K + 0.5) * sz * q
+    ], axis=-1).reshape(-1, 3) # Reshape to (fx*fy*fz, 3)
+    
+    # Apply the transformation
+    # This will be (N, 3) = (N, 3) @ (3, 3).T + (3,)
+    # R is (3,3), im_vectors is (N,3). For matrix multiplication, R @ im_vectors.T would work, or re-think dimensions.
+    # Let's align for direct matrix multiplication with R
+    transformed_points_flat = (R @ im_vectors.T).T + qoff
+    
+    # Reshape back to the desired output shape (fx, fy, fz, 3)
+    coor_vectorized = transformed_points_flat.reshape(fx, fy, fz, 3)
+    return coor_vectorized
 
 def copy_nifti_orientation(ref_nii, source_nii, output_nii):
     hdr0=readnii(ref_nii,header_only=True)

@@ -123,6 +123,38 @@ def fillgaps(nii_dir, nii_file, gap=0, fillthres=None, boxsize=3, minv=1, maxv=N
     hdr['vox_offset']=352
     savenii(nii3,hdr,nii_dir+'fill_'+nii_file)
 
+def fillgapsavg(nii_dir, nii_file, gap=0, fillthres_ratio=1/3, boxsize=3, filltype='mean', prefix='fill'):
+    nii,hdr=readnii(nii_dir+nii_file,scaling=False)
+    
+    boxmin=int((boxsize-1)//2)
+    boxmax=int(np.ceil((boxsize-1)/2))
+    
+    boxtotal=boxsize**3
+    fillthres=int(boxtotal*fillthres_ratio)
+    
+    niif=copy.deepcopy(nii).astype(np.float32)
+    
+    for i in range(boxmin,nii.shape[0]-boxmax):
+        for j in range(boxmin,nii.shape[1]-boxmax):
+            for k in range(boxmin,nii.shape[2]-boxmax):
+                if (nii[i,j,k]==gap) & (np.sum(nii[i-boxmin:i+boxmax+1,j-boxmin:j+boxmax+1,k-boxmin:k+boxmax+1]!=gap) > fillthres):
+                    tmp=nii[i-boxmin:i+boxmax+1,j-boxmin:j+boxmax+1,k-boxmin:k+boxmax+1]
+                    if filltype=='mean':
+                        niif[i,j,k]=np.mean(tmp[(tmp!=gap)])
+                    elif filltype=='max':
+                        niif[i,j,k]=np.max(tmp[(tmp!=gap)])
+                    elif filltype=='min':
+                        niif[i,j,k]=np.min(tmp[(tmp!=gap)])
+                    else:
+                        niif[i,j,k]=np.median(tmp[(tmp!=gap)])
+                          
+    hdr['datatype']=16
+    hdr['bitpix']=32
+    hdr['scl_slope']=1
+    hdr['scl_inter']=0
+    hdr['vox_offset']=352
+    savenii(niif,hdr,nii_dir+prefix+'_'+nii_file)
+
 
 def atropos_seg(an4_dir,gmin=4,gmax=6,reversed_contrast=False,weirdMP2R_contrast=False,gmid=5):
     

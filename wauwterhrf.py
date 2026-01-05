@@ -46,3 +46,27 @@ def lmfit_doublegamma(params,hrflen,ydata,timestep):
     p0[6]=params['amplitude'].value
     ymodel=doublegammahrf(p0,hrflen,timestep)
     return (ymodel-ydata)    
+
+def param_convolve2(hrf,par0):
+    onset=par0[0]
+    durat=par0[1]
+    xax=np.arange(int(np.round(par0[4])))
+    act=(erf(xax-onset)+1)/2
+    deact=(1-erf(xax-onset-durat))/2
+    desmat=act*deact
+    condes=np.convolve(desmat,hrf)
+    condes=condes[:int(np.round(par0[4]))]
+    condes/=np.max(condes)
+    condes*=par0[3]
+    condes+=par0[2]
+    return condes
+    
+def deconvolve2(params,hrf,ydata):
+    par0=np.zeros(5,dtype=np.float32)
+    par0[0]=params['onset'].value
+    par0[1]=params['duration'].value
+    par0[2]=params['const'].value
+    par0[3]=params['amplitude'].value
+    par0[4]=params['runlength'].value
+    ymodel=param_convolve2(hrf,par0)
+    return (ymodel-ydata)
