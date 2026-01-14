@@ -403,8 +403,9 @@ def layersmooth(niifile,layfile,fwhm=1,kernelsize=7,nlay=6,parcfile='',lowcut=10
     if parcfile != '':
         parc,hdrparc=readnii(parcfile,scaling=False)
         mask*=parc.astype(np.int16)
+        del parc
     mask=np.reshape(mask,nvox)
-    del parc
+    
 
     layz=np.max(lay)
     lay=np.ceil(lay/(layz/float(nlay)))
